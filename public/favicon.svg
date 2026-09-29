@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="20" fill="#0B3A6D"/>
+  <circle cx="50" cy="50" r="42" fill="#FFFFFF" stroke="#E65100" stroke-width="3"/>
+  <circle cx="50" cy="50" r="38" fill="#F8FAFC"/>
+  <!-- Ashoka Chakra Spokes Representation -->
+  <circle cx="50" cy="50" r="18" fill="none" stroke="#0B3A6D" stroke-width="2.5"/>
+  <circle cx="50" cy="50" r="4" fill="#0B3A6D"/>
+  <text x="50" y="24" text-anchor="middle" fill="#0B3A6D" font-family="'Noto Sans Devanagari', sans-serif" font-size="10" font-weight="900">रीवा</text>
+  <text x="50" y="86" text-anchor="middle" fill="#E65100" font-family="'Noto Sans Devanagari', sans-serif" font-size="9" font-weight="800">निगम</text>
+</svg>
