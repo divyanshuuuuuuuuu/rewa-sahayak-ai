@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route } from 'react-router-dom';
 import { GovProvider } from './context/GovContext';
 import Layout from './components/Layout';
 import Home from './pages/Home';
@@ -17,7 +17,7 @@ import Analytics from './pages/admin/Analytics';
 export default function App() {
   return (
     <GovProvider>
-      <BrowserRouter>
+      <HashRouter>
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<Home />} />
@@ -34,7 +34,7 @@ export default function App() {
             <Route path="/admin/analytics" element={<Analytics />} />
           </Route>
         </Routes>
-      </BrowserRouter>
+      </HashRouter>
     </GovProvider>
   );
 }
