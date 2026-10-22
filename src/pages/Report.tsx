@@ -12,7 +12,6 @@ import type { AIAnalysis, CivicMedia } from '../types';
 import MapView from '../components/MapView';
 import { AshokaEmblem, RewaMunicipalLogo } from '../components/Emblem';
 import { useGov } from '../context/GovContext';
-import { WhatsAppShareButton, PhotoDownloadButton } from '../components/ShareActions';
 
 type InputMode = 'voice' | 'photo' | 'text';
 type ReportStep = 'input' | 'processing' | 'preview' | 'submitted';
@@ -1258,50 +1257,6 @@ export default function Report() {
                 <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
                   {bilingual('डिजिटल सत्यापन कोड:', 'Digital Verification Code:')} GOV-MP-REWA-{ticketNumber}
                 </span>
-              </div>
-
-              {/* WhatsApp Share & Photo Download Action Card */}
-              <div
-                style={{
-                  background: '#f0fdf4',
-                  border: '1.5px solid #86efac',
-                  borderRadius: '8px',
-                  padding: '1rem',
-                  marginBottom: '1.5rem',
-                  textAlign: 'left',
-                }}
-              >
-                <div style={{ fontWeight: 800, color: '#166534', fontSize: '0.95rem', marginBottom: '0.35rem' }}>
-                  📲 {bilingual('व्हाट्सएप पर पावती भेजें एवं फोटो डाउनलोड करें', 'Share Receipt on WhatsApp & Download Photo')}
-                </div>
-                <p style={{ fontSize: '0.8rem', color: '#334155', marginBottom: '0.85rem' }}>
-                  {bilingual(
-                    'अपनी आधिकारिक पावती व साक्ष्य फोटो तुरंत अपने क्षेत्रीय पार्षद, नगर निगम वार्ड अधिकारी या परिवार को WhatsApp पर भेजें।',
-                    'Share your official receipt ticket and geo-evidence photo with your Ward Councillor, friends, or WhatsApp groups.'
-                  )}
-                </p>
-                <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <WhatsAppShareButton
-                    data={{
-                      ticketNumber,
-                      title: analysis?.title || 'Civic Issue',
-                      category: analysis?.category || 'Civic Grievance',
-                      address: address || 'Rewa',
-                      status: 'SUBMITTED',
-                      statusLabelText: bilingual('दर्ज की गई', 'Submitted'),
-                      severity: analysis?.severity || 'MEDIUM',
-                      imageUrl: imagePreview,
-                    }}
-                    showDownloadHint={true}
-                  />
-                  {imagePreview && (
-                    <PhotoDownloadButton
-                      imageUrl={imagePreview}
-                      ticketNumber={ticketNumber}
-                      label={bilingual('साक्ष्य फोटो डाउनलोड करें', 'Download Photo Evidence')}
-                    />
-                  )}
-                </div>
               </div>
 
               {/* Action Buttons */}

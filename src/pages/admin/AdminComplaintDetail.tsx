@@ -1,15 +1,24 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Sparkles, Clock, Film, Video, Camera, Upload, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Sparkles, Clock, Film, Video, Camera, Upload, CheckCircle2, Eye, EyeOff, MessageSquare, Download, Share2, PhoneCall } from 'lucide-react';
 import { getComplaintById, updateComplaintStatus, assignComplaint, updateComplaintPriority, syncFromSupabase } from '../../services/store';
 import { uploadReportImage, getImageUrl } from '../../services/supabaseStore';
+import {
+  getDepartmentWorkers,
+  formatAssignmentWhatsAppMessage,
+  createWhatsAppDeepLink,
+  logAssignmentNotification,
+  getNotificationsForComplaint,
+  downloadComplaintPhoto,
+  type DepartmentWorker,
+  type NotificationRecord,
+} from '../../services/whatsappService';
 import { supabase } from '../../services/supabase';
 import { statusColors, severityColors, moduleColors, categoryIcons } from '../../services/ai';
 import { demoDepartments } from '../../data/demoData';
 import MapView from '../../components/MapView';
 import type { ComplaintStatus, Severity } from '../../types';
 import { useGov } from '../../context/GovContext';
-import { WhatsAppShareButton, PhotoDownloadButton } from '../../components/ShareActions';
 
 export default function AdminComplaintDetail() {
   const { id } = useParams();
@@ -24,6 +33,14 @@ export default function AdminComplaintDetail() {
   const [internalNote, setInternalNote] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const completionFileInputRef = useRef<HTMLInputElement>(null);
+
+  // WhatsApp & Worker Notification States
+  const [workers, setWorkers] = useState<DepartmentWorker[]>([]);
+  const [selectedWorkerPhone, setSelectedWorkerPhone] = useState('');
+  const [selectedWorkerName, setSelectedWorkerName] = useState('');
+  const [customPhone, setCustomPhone] = useState('');
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -142,10 +159,76 @@ export default function AdminComplaintDetail() {
     if (updated) { setComplaint({ ...updated }); setNewStatus(''); setStatusNote(''); }
   };
 
+  useEffect(() => {
+    const dept = assignDept || complaint?.assigned_department;
+    getDepartmentWorkers(dept).then(w => {
+      setWorkers(w);
+      if (w.length > 0) {
+        const match = w.find(item => item.name === (assignTo || complaint?.assigned_to));
+        if (match) {
+          setSelectedWorkerPhone(match.whatsapp_phone);
+          setSelectedWorkerName(match.name);
+        } else {
+          setSelectedWorkerPhone(w[0].whatsapp_phone);
+          setSelectedWorkerName(w[0].name);
+        }
+      }
+    });
+  }, [assignDept, complaint?.assigned_department, assignTo, complaint?.assigned_to]);
+
+  useEffect(() => {
+    if (complaint?.id) {
+      getNotificationsForComplaint(complaint.id).then(setNotifications);
+    }
+  }, [complaint?.id]);
+
+  const handleSendWhatsApp = async () => {
+    if (!complaint) return;
+    const phoneToUse = customPhone.trim() || selectedWorkerPhone;
+    if (!phoneToUse) {
+      alert(bilingual('कृपया कर्मी या मोबाइल नंबर चुनें।', 'Please select a worker or enter a phone number.'));
+      return;
+    }
+    const workerName = selectedWorkerName || customPhone || 'Field Officer';
+    const message = formatAssignmentWhatsAppMessage(
+      complaint,
+      { name: workerName, phone: phoneToUse },
+      'Rewa Municipal Control Center'
+    );
+    const waLink = createWhatsAppDeepLink(phoneToUse, message);
+
+    setSendingWhatsApp(true);
+    try {
+      await logAssignmentNotification(
+        complaint.id,
+        workerName,
+        phoneToUse,
+        complaint.assigned_department || assignDept || 'Rewa Municipal Corporation',
+        message,
+        'Admin Officer'
+      );
+      const updated = await getNotificationsForComplaint(complaint.id);
+      setNotifications(updated);
+      window.open(waLink, '_blank');
+    } finally {
+      setSendingWhatsApp(false);
+    }
+  };
+
+  const handleDownloadPhoto = async () => {
+    if (!complaint?.image_url) return;
+    await downloadComplaintPhoto(complaint.image_url, complaint.ticket_number);
+  };
+
   const handleAssign = () => {
     if (!assignDept) return;
-    const updated = assignComplaint(complaint.id, assignDept, assignTo);
-    if (updated) { setComplaint({ ...updated }); setAssignDept(''); setAssignTo(''); }
+    const targetWorker = assignTo || selectedWorkerName || (workers[0] ? workers[0].name : '');
+    const updated = assignComplaint(complaint.id, assignDept, targetWorker);
+    if (updated) {
+      setComplaint({ ...updated });
+      setAssignDept('');
+      setAssignTo('');
+    }
   };
 
   const handlePriorityChange = () => {
@@ -163,45 +246,9 @@ export default function AdminComplaintDetail() {
   return (
     <div className="page fade-in">
       <div className="container">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <Link to="/admin/complaints" className="btn btn-secondary btn-sm">
-            <ArrowLeft size={16} /> {bilingual('← सभी शिकायतों पर वापस', 'Back to Complaints')}
-          </Link>
-
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            <WhatsAppShareButton
-              data={{
-                ticketNumber: complaint.ticket_number,
-                id: complaint.id,
-                title: complaint.title,
-                category: categoryLabel(complaint.category),
-                address: complaint.address,
-                status: complaint.status,
-                statusLabelText: statusLabel(complaint.status),
-                severity: complaint.severity,
-                dateStr: formatDateTime(complaint.created_at),
-                imageUrl: complaint.image_url,
-              }}
-              showDownloadHint={true}
-            />
-            {complaint.image_url && (
-              <PhotoDownloadButton
-                imageUrl={complaint.image_url}
-                ticketNumber={complaint.ticket_number}
-                label={bilingual('साक्ष्य फोटो', 'Evidence Photo')}
-                suffix="before"
-              />
-            )}
-            {complaint.video_url && (
-              <PhotoDownloadButton
-                imageUrl={complaint.video_url}
-                ticketNumber={complaint.ticket_number}
-                label={bilingual('समाधान फोटो', 'Resolution Photo')}
-                suffix="after"
-              />
-            )}
-          </div>
-        </div>
+        <Link to="/admin/complaints" className="btn btn-secondary btn-sm" style={{ marginBottom: '1rem' }}>
+          <ArrowLeft size={16} /> {bilingual('← सभी शिकायतों पर वापस', 'Back to Complaints')}
+        </Link>
 
         <div className="detail-grid">
           {/* Main */}
@@ -385,13 +432,51 @@ export default function AdminComplaintDetail() {
             {/* Assign */}
             <div className="card">
               <h3 className="detail-section-title">{bilingual('विभाग आवंटन', 'Assign Department')}</h3>
-              <select className="form-input" value={assignDept} onChange={(e) => setAssignDept(e.target.value)} style={{ marginBottom: '0.5rem' }}>
+              <select
+                className="form-input"
+                value={assignDept}
+                onChange={(e) => {
+                  setAssignDept(e.target.value);
+                  setAssignTo('');
+                }}
+                style={{ marginBottom: '0.5rem' }}
+              >
                 <option value="">{bilingual('विभाग चुनें...', 'Select department...')}</option>
                 {demoDepartments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
               </select>
+
+              {/* Registered Workers dropdown for chosen department */}
+              {workers.length > 0 && (
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.2rem' }}>
+                    {bilingual('पंजीकृत विभागीय कर्मी:', 'Registered Department Worker:')}
+                  </label>
+                  <select
+                    className="form-input"
+                    value={assignTo}
+                    onChange={(e) => {
+                      setAssignTo(e.target.value);
+                      const matched = workers.find(w => w.name === e.target.value);
+                      if (matched) {
+                        setSelectedWorkerPhone(matched.whatsapp_phone);
+                        setSelectedWorkerName(matched.name);
+                      }
+                    }}
+                    style={{ marginBottom: '0.5rem' }}
+                  >
+                    <option value="">{bilingual('विभागीय कर्मी चुनें...', 'Select Worker...')}</option>
+                    {workers.map(w => (
+                      <option key={w.id} value={w.name}>
+                        {w.name} ({w.designation})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <input
                 className="form-input"
-                placeholder={bilingual('प्रभारी अधिकारी (ऐच्छिक)', 'Assign to person (optional)')}
+                placeholder={bilingual('या अन्य नाम दर्ज करें (ऐच्छिक)', 'Or custom person name (optional)')}
                 value={assignTo}
                 onChange={(e) => setAssignTo(e.target.value)}
                 style={{ marginBottom: '0.5rem' }}
@@ -399,6 +484,111 @@ export default function AdminComplaintDetail() {
               <button className="btn btn-secondary btn-sm" style={{ width: '100%', justifyContent: 'center', background: '#0b3a6d', color: '#fff' }} onClick={handleAssign} disabled={!assignDept}>
                 {bilingual('आवंटित करें', 'Assign')}
               </button>
+            </div>
+
+            {/* WhatsApp Worker Notification (Admin Only) */}
+            <div className="card" style={{ borderColor: '#22c55e', background: '#f0fdf4', boxShadow: '0 2px 8px rgba(34,197,94,0.08)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                <h3 className="detail-section-title" style={{ color: '#166534', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <MessageSquare size={16} color="#16a34a" />
+                  {bilingual('व्हाट्सएप टास्क अलर्ट (Worker Dispatch)', 'WhatsApp Worker Alert')}
+                </h3>
+                <span className="badge" style={{ background: '#dcfce7', color: '#166534', fontSize: '0.68rem', fontWeight: 800 }}>
+                  ADMIN ONLY
+                </span>
+              </div>
+              <p style={{ fontSize: '0.78rem', color: '#166534', marginBottom: '0.65rem' }}>
+                {bilingual(
+                  'प्रभारी कर्मी को सीधे अपने पर्सनल व्हाट्सएप से संपूर्ण विवरण, लोकेशन व मैप लिंक भेजें:',
+                  'Dispatch task order with Google Map link & photos directly from your personal WhatsApp:'
+                )}
+              </p>
+
+              {/* Recipient Worker & WhatsApp No */}
+              <div style={{ marginBottom: '0.5rem' }}>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#166534', display: 'block', marginBottom: '0.2rem' }}>
+                  {bilingual('प्राप्तकर्ता कर्मी / फोन', 'Recipient Worker & WhatsApp No.')}
+                </label>
+                <select
+                  className="form-input"
+                  style={{ fontSize: '0.8rem', padding: '0.4rem 0.5rem', marginBottom: '0.4rem' }}
+                  value={selectedWorkerPhone}
+                  onChange={(e) => {
+                    setSelectedWorkerPhone(e.target.value);
+                    const matched = workers.find(w => w.whatsapp_phone === e.target.value);
+                    if (matched) setSelectedWorkerName(matched.name);
+                  }}
+                >
+                  <option value="">{bilingual('कर्मी चुनें...', 'Select Worker...')}</option>
+                  {workers.map(w => (
+                    <option key={w.id} value={w.whatsapp_phone}>
+                      {w.name} ({w.designation}) — {w.whatsapp_phone}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="form-input"
+                  style={{ fontSize: '0.8rem', padding: '0.4rem 0.5rem' }}
+                  placeholder={bilingual('या अन्य मोबाइल नंबर (उदा. 9826123456)', 'Or custom phone number (e.g. 9826123456)')}
+                  value={customPhone}
+                  onChange={(e) => setCustomPhone(e.target.value)}
+                />
+              </div>
+
+              {/* Action Buttons: WhatsApp & Download Photo */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  style={{
+                    background: '#16a34a',
+                    borderColor: '#15803d',
+                    color: '#ffffff',
+                    width: '100%',
+                    justifyContent: 'center',
+                    fontWeight: 700,
+                  }}
+                  onClick={handleSendWhatsApp}
+                  disabled={sendingWhatsApp}
+                >
+                  <MessageSquare size={14} />
+                  {sendingWhatsApp ? bilingual('खुल रहा है...', 'Opening WhatsApp...') : bilingual('📲 व्हाट्सएप पर कार्य आदेश भेजें', 'Send via Personal WhatsApp')}
+                </button>
+
+                {complaint.image_url && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ width: '100%', justifyContent: 'center' }}
+                    onClick={handleDownloadPhoto}
+                  >
+                    <Download size={14} />
+                    {bilingual('📥 साक्ष्य फोटो डाउनलोड करें', 'Download Evidence Photo')}
+                  </button>
+                )}
+              </div>
+
+              {/* Notification History Logs */}
+              {notifications.length > 0 && (
+                <div style={{ marginTop: '0.85rem', paddingTop: '0.65rem', borderTop: '1px solid #bbf7d0' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#166534', marginBottom: '0.35rem' }}>
+                    ✓ {bilingual('व्हाट्सएप अलर्ट इतिहास (Supabase Log):', 'WhatsApp Dispatch History (Supabase Log):')}
+                  </div>
+                  <div style={{ maxHeight: '110px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    {notifications.map(n => (
+                      <div key={n.id} style={{ background: '#ffffff', padding: '0.35rem 0.5rem', borderRadius: 4, border: '1px solid #dcfce7', fontSize: '0.7rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#15803d', fontWeight: 600 }}>
+                          <span>{n.recipient_name}</span>
+                          <span>{new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                        <div style={{ color: '#64748b', fontSize: '0.65rem' }}>
+                          {n.recipient_phone} • {n.sent_by_name}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Change Priority */}
