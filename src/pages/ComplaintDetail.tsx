@@ -5,6 +5,7 @@ import { getComplaintById, syncFromSupabase } from '../services/store';
 import { statusColors, severityColors, moduleColors, categoryIcons } from '../services/ai';
 import MapView from '../components/MapView';
 import { useGov } from '../context/GovContext';
+import { WhatsAppShareButton, PhotoDownloadButton, ComplaintShareCard } from '../components/ShareActions';
 
 export default function ComplaintDetail() {
   const { id } = useParams();
@@ -81,21 +82,40 @@ export default function ComplaintDetail() {
     });
   };
 
+  const shareData = {
+    ticketNumber: complaint.ticket_number,
+    id: complaint.id,
+    title: complaint.title,
+    category: categoryLabel(complaint.category),
+    address: complaint.address,
+    status: complaint.status,
+    statusLabelText: statusLabel(complaint.status),
+    severity: complaint.severity,
+    dateStr: formatDateTime(complaint.created_at),
+    imageUrl: complaint.image_url,
+  };
+
   return (
     <div className="page fade-in">
       <div className="container">
         
-        {/* Navigation & Print Top Bar */}
+        {/* Navigation, WhatsApp Share & Photo Download Top Bar */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
           <Link to="/complaints" className="btn btn-secondary btn-sm">
             <ArrowLeft size={16} />
             <span>{bilingual('← सभी शिकायतों पर वापस', '← Back to All Complaints')}</span>
           </Link>
 
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => window.print()}>
-            <Printer size={15} />
-            <span>{bilingual('पावती प्रिंट करें', 'Print Acknowledgment')}</span>
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <WhatsAppShareButton data={shareData} showDownloadHint={true} />
+            {complaint.image_url && (
+              <PhotoDownloadButton imageUrl={complaint.image_url} ticketNumber={complaint.ticket_number} />
+            )}
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => window.print()}>
+              <Printer size={15} />
+              <span>{bilingual('पावती प्रिंट', 'Print')}</span>
+            </button>
+          </div>
         </div>
 
         {/* Official Header Banner */}
@@ -249,11 +269,15 @@ export default function ComplaintDetail() {
                           <img src={item.url} alt={item.name} className="media-thumb-img" />
                         )}
                       </div>
-                      <div className="media-item-info">
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px', fontWeight: 600 }}>
+                      <div className="media-item-info" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px', fontWeight: 600 }}>
                           {item.name}
                         </span>
-                        <span style={{ color: '#15803d', fontWeight: 700 }}>✓ Verified</span>
+                        <PhotoDownloadButton
+                          imageUrl={item.url}
+                          ticketNumber={complaint.ticket_number}
+                          variant="icon"
+                        />
                       </div>
                     </div>
                   ))}
@@ -297,6 +321,9 @@ export default function ComplaintDetail() {
 
           {/* Sidebar Column */}
           <div className="detail-sidebar">
+            {/* Citizen WhatsApp Share & Photo Download Card */}
+            <ComplaintShareCard data={shareData} />
+
             {/* Resolution Note if resolved */}
             {complaint.resolution_note && (
               <div className="card" style={{ borderColor: '#86efac', background: '#f0fdf4' }}>

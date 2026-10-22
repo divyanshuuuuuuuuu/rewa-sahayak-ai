@@ -9,6 +9,7 @@ import { demoDepartments } from '../../data/demoData';
 import MapView from '../../components/MapView';
 import type { ComplaintStatus, Severity } from '../../types';
 import { useGov } from '../../context/GovContext';
+import { WhatsAppShareButton, PhotoDownloadButton } from '../../components/ShareActions';
 
 export default function AdminComplaintDetail() {
   const { id } = useParams();
@@ -162,9 +163,45 @@ export default function AdminComplaintDetail() {
   return (
     <div className="page fade-in">
       <div className="container">
-        <Link to="/admin/complaints" className="btn btn-secondary btn-sm" style={{ marginBottom: '1rem' }}>
-          <ArrowLeft size={16} /> {bilingual('← सभी शिकायतों पर वापस', 'Back to Complaints')}
-        </Link>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <Link to="/admin/complaints" className="btn btn-secondary btn-sm">
+            <ArrowLeft size={16} /> {bilingual('← सभी शिकायतों पर वापस', 'Back to Complaints')}
+          </Link>
+
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <WhatsAppShareButton
+              data={{
+                ticketNumber: complaint.ticket_number,
+                id: complaint.id,
+                title: complaint.title,
+                category: categoryLabel(complaint.category),
+                address: complaint.address,
+                status: complaint.status,
+                statusLabelText: statusLabel(complaint.status),
+                severity: complaint.severity,
+                dateStr: formatDateTime(complaint.created_at),
+                imageUrl: complaint.image_url,
+              }}
+              showDownloadHint={true}
+            />
+            {complaint.image_url && (
+              <PhotoDownloadButton
+                imageUrl={complaint.image_url}
+                ticketNumber={complaint.ticket_number}
+                label={bilingual('साक्ष्य फोटो', 'Evidence Photo')}
+                suffix="before"
+              />
+            )}
+            {complaint.video_url && (
+              <PhotoDownloadButton
+                imageUrl={complaint.video_url}
+                ticketNumber={complaint.ticket_number}
+                label={bilingual('समाधान फोटो', 'Resolution Photo')}
+                suffix="after"
+              />
+            )}
+          </div>
+        </div>
 
         <div className="detail-grid">
           {/* Main */}

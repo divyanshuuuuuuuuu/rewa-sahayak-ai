@@ -6,6 +6,7 @@ import { statusColors, categoryIcons } from "../services/ai";
 import { useGov } from "../context/GovContext";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../services/supabase";
+import { WhatsAppShareButton } from "../components/ShareActions";
 
 const MODULE_COLORS: Record<string, string> = {
   smart_waste: "#16a34a", jalrakshak: "#0284c7", rewa_sahayak: "#7c3aed", other: "#64748b"
@@ -227,9 +228,28 @@ export default function Complaints() {
                           </span>
                         )}
                       </div>
-                      <span style={{ fontSize: "0.78rem", color: "#64748b", display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                        <Clock size={12} /> {formatDate(r.submitted_at)}
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                        <span style={{ fontSize: "0.78rem", color: "#64748b", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                          <Clock size={12} /> {formatDate(r.submitted_at)}
+                        </span>
+                        <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                          <WhatsAppShareButton
+                            data={{
+                              ticketNumber: r.reference_number,
+                              id: r.id,
+                              title: r.title,
+                              category: categoryLabel(r.category),
+                              address: r.location_description || r.area_or_ward || "Rewa",
+                              status: r.current_status,
+                              statusLabelText: statusLabel(r.current_status),
+                              severity: r.severity,
+                              dateStr: formatDate(r.submitted_at),
+                              imageUrl: r.before_image_path,
+                            }}
+                            variant="compact"
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </Link>
