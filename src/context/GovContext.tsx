@@ -44,19 +44,19 @@ const categoryMap: Record<string, { hi: string; en: string }> = {
 };
 
 const GovContext = createContext<GovContextType>({
-  lang: 'hi',
+  lang: 'en',
   setLang: () => {},
   toggleLang: () => {},
   fontSize: 'normal',
   setFontSize: () => {},
-  bilingual: (hi, en) => hi,
+  bilingual: (hi, en) => en,
   statusLabel: (s) => s,
   moduleLabel: (m) => m,
   categoryLabel: (c) => c,
 });
 
 export function GovProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<Language>('hi');
+  const [lang, setLang] = useState<Language>('en');
   const [fontSize, setFontSize] = useState<FontSize>('normal');
 
   useEffect(() => {

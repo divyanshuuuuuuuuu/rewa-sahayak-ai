@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAllComplaints } from '../services/store';
+import { getAllComplaints, syncFromSupabase } from '../services/store';
 import MapView from '../components/MapView';
 import type { Complaint } from '../types';
 import { useGov } from '../context/GovContext';
@@ -8,11 +8,18 @@ import { useGov } from '../context/GovContext';
 export default function MapPage() {
   const navigate = useNavigate();
   const { bilingual } = useGov();
+  const [complaintsList, setComplaintsList] = useState(getAllComplaints());
   const [moduleFilter, setModuleFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
 
-  const allComplaints = getAllComplaints();
-  const filtered = allComplaints.filter((c) => {
+  useEffect(() => {
+    syncFromSupabase().then(() => setComplaintsList(getAllComplaints()));
+    const onUpdate = () => setComplaintsList(getAllComplaints());
+    window.addEventListener('rewa_store_updated', onUpdate);
+    return () => window.removeEventListener('rewa_store_updated', onUpdate);
+  }, []);
+
+  const filtered = complaintsList.filter((c) => {
     if (moduleFilter && c.module !== moduleFilter) return false;
     if (statusFilter === 'active' && ['RESOLVED', 'CLOSED'].includes(c.status)) return false;
     if (statusFilter === 'resolved' && !['RESOLVED', 'CLOSED'].includes(c.status)) return false;

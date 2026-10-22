@@ -1,16 +1,30 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { AlertTriangle, CheckCircle, Clock, FileText, TrendingUp, ArrowRight, ShieldCheck } from 'lucide-react';
-import { getStats, getAllComplaints } from '../../services/store';
+import { getStats, getAllComplaints, syncFromSupabase } from '../../services/store';
 import { statusLabels, statusColors, moduleNames, moduleColors, categoryIcons, severityColors } from '../../services/ai';
 import { AshokaEmblem } from '../../components/Emblem';
 import { useGov } from '../../context/GovContext';
 
 export default function AdminDashboard() {
-  const stats = getStats();
-  const complaints = getAllComplaints();
+  const [stats, setStats] = useState(getStats());
+  const [complaints, setComplaints] = useState(getAllComplaints());
   const recent = complaints.slice(0, 8);
   const { lang, bilingual, statusLabel, moduleLabel, categoryLabel } = useGov();
+
+  useEffect(() => {
+    syncFromSupabase().then(() => {
+      setStats(getStats());
+      setComplaints(getAllComplaints());
+    });
+    const onUpdate = () => {
+      setStats(getStats());
+      setComplaints(getAllComplaints());
+    };
+    window.addEventListener('rewa_store_updated', onUpdate);
+    return () => window.removeEventListener('rewa_store_updated', onUpdate);
+  }, []);
 
   // Chart data
   const categoryData = Object.entries(stats.by_category)

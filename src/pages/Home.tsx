@@ -1,17 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Mic, Camera, Droplets, Trash2, MapPin, ArrowRight, ChevronRight, Eye,
   MessageSquare, ShieldCheck, PhoneCall, Search, Sparkles
 } from 'lucide-react';
-import { getStats } from '../services/store';
+import { getStats, syncFromSupabase } from '../services/store';
 import { useGov } from '../context/GovContext';
 
 export default function Home() {
-  const stats = getStats();
+  const [stats, setStats] = useState(getStats());
   const navigate = useNavigate();
   const { bilingual } = useGov();
   const [searchTicket, setSearchTicket] = useState('');
+
+  useEffect(() => {
+    syncFromSupabase().then(() => setStats(getStats()));
+    const onUpdate = () => setStats(getStats());
+    window.addEventListener('rewa_store_updated', onUpdate);
+    return () => window.removeEventListener('rewa_store_updated', onUpdate);
+  }, []);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();

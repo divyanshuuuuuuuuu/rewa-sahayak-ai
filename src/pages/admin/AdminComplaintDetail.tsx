@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Sparkles, Clock, Film, Video, Camera } from 'lucide-react';
-import { getComplaintById, updateComplaintStatus, assignComplaint, updateComplaintPriority } from '../../services/store';
+import { ArrowLeft, Sparkles, Clock, Film, Video, Camera, Upload, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { getComplaintById, updateComplaintStatus, assignComplaint, updateComplaintPriority, syncFromSupabase } from '../../services/store';
+import { uploadReportImage, getImageUrl } from '../../services/supabaseStore';
+import { supabase } from '../../services/supabase';
 import { statusColors, severityColors, moduleColors, categoryIcons } from '../../services/ai';
 import { demoDepartments } from '../../data/demoData';
 import MapView from '../../components/MapView';
@@ -12,12 +14,99 @@ export default function AdminComplaintDetail() {
   const { id } = useParams();
   const { lang, bilingual, statusLabel, moduleLabel, categoryLabel } = useGov();
   const [complaint, setComplaint] = useState(id ? getComplaintById(id) : undefined);
+  const [loading, setLoading] = useState(!complaint);
   const [newStatus, setNewStatus] = useState('');
   const [statusNote, setStatusNote] = useState('');
   const [assignDept, setAssignDept] = useState('');
   const [assignTo, setAssignTo] = useState('');
   const [newPriority, setNewPriority] = useState('');
   const [internalNote, setInternalNote] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const completionFileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    const loadData = async () => {
+      let current = getComplaintById(id);
+      if (!current) {
+        await syncFromSupabase();
+        current = getComplaintById(id);
+      }
+      if (active) {
+        setComplaint(current);
+        setLoading(false);
+      }
+    };
+    loadData();
+
+    const onUpdate = () => {
+      if (id) setComplaint(getComplaintById(id));
+    };
+    window.addEventListener('rewa_store_updated', onUpdate);
+    return () => {
+      active = false;
+      window.removeEventListener('rewa_store_updated', onUpdate);
+    };
+  }, [id]);
+
+  const handleCompletionUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !complaint) return;
+    setUploadingImage(true);
+    try {
+      const { path, error } = await uploadReportImage(file, 'completion-images');
+      if (error) {
+        alert('Image upload failed: ' + error);
+        return;
+      }
+      if (path) {
+        const fullUrl = getImageUrl(path, 'completion-images');
+        await supabase
+          .from('citizen_reports')
+          .update({
+            completion_image_path: path,
+            current_status: 'RESOLVED',
+            resolved_at: new Date().toISOString(),
+            resolution_note: 'Resolution verified with on-site completion photograph.',
+          })
+          .eq('id', complaint.id);
+
+        await supabase.from('report_status_history').insert({
+          report_id: complaint.id,
+          previous_status: complaint.status,
+          new_status: 'RESOLVED',
+          public_message: 'Problem resolved. Completion photo attached by Field Inspector.',
+          changed_by_name: 'Admin Officer',
+        });
+
+        // Update local complaint
+        const updated = updateComplaintStatus(
+          complaint.id,
+          'RESOLVED',
+          'Resolved with verified completion photograph.',
+          'Admin Officer'
+        );
+        if (updated) {
+          updated.video_url = fullUrl;
+          setComplaint({ ...updated });
+        }
+      }
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="page">
+        <div className="container" style={{ textAlign: 'center', padding: '4rem 1rem' }}>
+          <div className="spinner" style={{ margin: '0 auto 1rem' }} />
+          <p style={{ color: '#0b3a6d' }}>{bilingual('शिकायत लोड हो रही है...', 'Loading complaint...')}</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!complaint) {
     return (
@@ -191,6 +280,48 @@ export default function AdminComplaintDetail() {
 
           {/* Sidebar — Admin Actions */}
           <div className="detail-sidebar">
+            {/* Completion Photo (Before vs After Evidence) */}
+            <div className="card" style={{ borderColor: '#86efac', background: '#f0fdf4' }}>
+              <h3 className="detail-section-title" style={{ color: '#166534' }}>
+                📸 {bilingual('समाधान फोटो (Completion Proof)', 'Completion Proof')}
+              </h3>
+              {complaint.video_url ? (
+                <div>
+                  <img
+                    src={complaint.video_url}
+                    alt="Resolved Proof"
+                    style={{ width: '100%', borderRadius: 8, maxHeight: 180, objectFit: 'cover', marginBottom: '0.5rem', border: '2px solid #22c55e' }}
+                  />
+                  <div style={{ fontSize: '0.78rem', color: '#15803d', fontWeight: 700 }}>
+                    ✓ {bilingual('समाधान फोटो अपलोड है', 'Completion Photo Verified')}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p style={{ fontSize: '0.78rem', color: '#166534', marginBottom: '0.5rem' }}>
+                    {bilingual('स्थल पर कार्य पूर्ण होने की वास्तविक फोटो अपलोड करें:', 'Upload on-site proof of completed repair work:')}
+                  </p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={completionFileInputRef}
+                    style={{ display: 'none' }}
+                    onChange={handleCompletionUpload}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ width: '100%', justifyContent: 'center', background: '#16a34a', color: '#fff' }}
+                    onClick={() => completionFileInputRef.current?.click()}
+                    disabled={uploadingImage}
+                  >
+                    <Upload size={14} />
+                    {uploadingImage ? bilingual('अपलोड हो रहा है...', 'Uploading to Supabase...') : bilingual('समाधान फोटो अपलोड करें', 'Upload Completion Photo')}
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Change Status */}
             <div className="card">
               <h3 className="detail-section-title">{bilingual('स्थिति अद्यतन करें', 'Change Status')}</h3>

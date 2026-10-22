@@ -1,6 +1,7 @@
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, MapPin, Clock, User, Building, Sparkles, Printer, ShieldCheck, CheckCircle2, Video, Film, Camera } from 'lucide-react';
-import { getComplaintById } from '../services/store';
+import { getComplaintById, syncFromSupabase } from '../services/store';
 import { statusColors, severityColors, moduleColors, categoryIcons } from '../services/ai';
 import MapView from '../components/MapView';
 import { useGov } from '../context/GovContext';
@@ -8,7 +9,45 @@ import { useGov } from '../context/GovContext';
 export default function ComplaintDetail() {
   const { id } = useParams();
   const { lang, bilingual, statusLabel, moduleLabel, categoryLabel } = useGov();
-  const complaint = id ? getComplaintById(id) : undefined;
+  const [complaint, setComplaint] = useState(id ? getComplaintById(id) : undefined);
+  const [loading, setLoading] = useState(!complaint);
+
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    const loadData = async () => {
+      let current = getComplaintById(id);
+      if (!current) {
+        await syncFromSupabase();
+        current = getComplaintById(id);
+      }
+      if (active) {
+        setComplaint(current);
+        setLoading(false);
+      }
+    };
+    loadData();
+
+    const onUpdate = () => {
+      if (id) setComplaint(getComplaintById(id));
+    };
+    window.addEventListener('rewa_store_updated', onUpdate);
+    return () => {
+      active = false;
+      window.removeEventListener('rewa_store_updated', onUpdate);
+    };
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="page">
+        <div className="container" style={{ textAlign: 'center', padding: '4rem 1rem' }}>
+          <div className="spinner" style={{ margin: '0 auto 1rem' }} />
+          <p style={{ color: '#0b3a6d', fontWeight: 600 }}>{bilingual('शिकायत लोड हो रही है...', 'Loading complaint details...')}</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!complaint) {
     return (

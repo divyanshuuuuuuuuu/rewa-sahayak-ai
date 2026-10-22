@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { analyzeProblemDemo, analyzeImageDemo, moduleNames, severityColors, categoryIcons } from '../services/ai';
 import { createComplaint } from '../services/store';
+import { uploadReportImage, getImageUrl } from '../services/supabaseStore';
 import { getCivicEvidenceSvg, getCivicVideoPosterSvg, createSampleCivicVideoBlob } from '../services/evidenceSvg';
 import type { AIAnalysis, CivicMedia } from '../types';
 import MapView from '../components/MapView';
@@ -251,6 +252,9 @@ export default function Report() {
         name: file.name,
         size: file.size,
       });
+      if (!isVideo && !imageFile) {
+        setImageFile(file);
+      }
     });
     setMediaList((prev) => [...prev, ...newItems]);
     // reset input value so user can re-select same file if needed
@@ -260,6 +264,7 @@ export default function Report() {
   const handleCameraPhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setImageFile(file);
     const url = URL.createObjectURL(file);
     const item: CivicMedia = {
       id: `cam-p-${Date.now()}`,
@@ -391,8 +396,8 @@ export default function Report() {
     setStep('preview');
   };
 
-  // Final submit with hard anti-fraud check
-  const handleSubmit = () => {
+  // Final submit with hard anti-fraud check and Supabase storage upload
+  const handleSubmit = async () => {
     if (!analysis) return;
 
     if (!hasMedia) {
@@ -403,6 +408,18 @@ export default function Report() {
         )
       );
       return;
+    }
+
+    let finalImageUrl = imagePreview;
+    if (imageFile) {
+      try {
+        const { path, error } = await uploadReportImage(imageFile, 'report-images');
+        if (!error && path) {
+          finalImageUrl = getImageUrl(path, 'report-images');
+        }
+      } catch (err) {
+        console.warn('Storage upload error, using preview data:', err);
+      }
     }
 
     const complaint = createComplaint({
@@ -418,7 +435,7 @@ export default function Report() {
       latitude: location?.[0] || 24.5373,
       longitude: location?.[1] || 81.3005,
       address: address || bilingual('वार्ड 12, रीवा', 'Ward 12, Rewa'),
-      image_url: imagePreview,
+      image_url: finalImageUrl,
       video_url: videoUrl,
       media: mediaList,
       voice_transcript: mode === 'voice' ? text : null,

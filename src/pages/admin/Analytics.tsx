@@ -1,13 +1,27 @@
+import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { TrendingUp, Sparkles } from 'lucide-react';
-import { getStats, getAllComplaints } from '../../services/store';
+import { getStats, getAllComplaints, syncFromSupabase } from '../../services/store';
 import { statusLabels, statusColors, moduleNames, moduleColors, categoryIcons } from '../../services/ai';
 import { useGov } from '../../context/GovContext';
 
 export default function Analytics() {
-  const stats = getStats();
-  const complaints = getAllComplaints();
+  const [stats, setStats] = useState(getStats());
+  const [complaints, setComplaints] = useState(getAllComplaints());
   const { bilingual, categoryLabel, moduleLabel, statusLabel } = useGov();
+
+  useEffect(() => {
+    syncFromSupabase().then(() => {
+      setStats(getStats());
+      setComplaints(getAllComplaints());
+    });
+    const onUpdate = () => {
+      setStats(getStats());
+      setComplaints(getAllComplaints());
+    };
+    window.addEventListener('rewa_store_updated', onUpdate);
+    return () => window.removeEventListener('rewa_store_updated', onUpdate);
+  }, []);
 
   // Resolution rate
   const resolved = stats.resolved + stats.closed;

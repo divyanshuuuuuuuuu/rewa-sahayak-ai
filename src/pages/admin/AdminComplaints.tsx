@@ -1,20 +1,28 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { getAllComplaints } from '../../services/store';
+import { getAllComplaints, syncFromSupabase } from '../../services/store';
 import { statusColors, severityColors, moduleColors, categoryIcons } from '../../services/ai';
 import { useGov } from '../../context/GovContext';
 
 export default function AdminComplaints() {
   const { lang, bilingual, statusLabel, moduleLabel, categoryLabel } = useGov();
+  const [allComplaints, setAllComplaints] = useState(getAllComplaints());
   const [statusFilter, setStatusFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [moduleFilter, setModuleFilter] = useState('');
   const [severityFilter, setSeverityFilter] = useState('');
   const [search, setSearch] = useState('');
 
+  useEffect(() => {
+    syncFromSupabase().then(() => setAllComplaints(getAllComplaints()));
+    const onUpdate = () => setAllComplaints(getAllComplaints());
+    window.addEventListener('rewa_store_updated', onUpdate);
+    return () => window.removeEventListener('rewa_store_updated', onUpdate);
+  }, []);
+
   const complaints = useMemo(() => {
-    let list = getAllComplaints();
+    let list = allComplaints;
     if (moduleFilter) list = list.filter(c => c.module === moduleFilter);
     if (statusFilter) list = list.filter(c => c.status === statusFilter);
     if (categoryFilter) list = list.filter(c => c.category === categoryFilter);
@@ -24,7 +32,7 @@ export default function AdminComplaints() {
       list = list.filter(c => c.title.toLowerCase().includes(q) || c.ticket_number.toLowerCase().includes(q) || c.address.toLowerCase().includes(q) || c.description.toLowerCase().includes(q));
     }
     return list;
-  }, [moduleFilter, statusFilter, categoryFilter, severityFilter, search]);
+  }, [allComplaints, moduleFilter, statusFilter, categoryFilter, severityFilter, search]);
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', {

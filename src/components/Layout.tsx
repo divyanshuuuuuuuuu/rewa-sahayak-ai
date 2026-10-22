@@ -2,11 +2,13 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { Shield, Home, PlusCircle, FileText, Map, PhoneCall, Globe, Building2 } from 'lucide-react';
 import { AshokaEmblem, RewaMunicipalLogo, SwachhBharatLogo } from './Emblem';
 import { useGov } from '../context/GovContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function Layout() {
   const location = useLocation();
-  const isAdmin = location.pathname.startsWith('/admin');
+  const isAdminPath = location.pathname.startsWith('/admin');
   const { lang, toggleLang, fontSize, setFontSize, bilingual } = useGov();
+  const { user, profile, isAdmin, signOut } = useAuth();
 
   const isActive = (path: string) => (location.pathname === path ? 'nav-link active' : 'nav-link');
   const isBottomActive = (path: string) =>
@@ -155,7 +157,7 @@ export default function Layout() {
       <nav className="navbar" role="navigation" aria-label="Main navigation">
         <div className="container">
           <div className="nav-links">
-            {!isAdmin ? (
+            {!isAdminPath ? (
               <>
                 <Link to="/" className={isActive('/')}>
                   <Home size={15} />
@@ -177,10 +179,17 @@ export default function Layout() {
                   <Building2 size={15} />
                   <span>{bilingual('पोर्टल परिचय', 'About Portal')}</span>
                 </Link>
-                <Link to="/admin" className="nav-link" style={{ marginLeft: '1rem', background: 'rgba(255,255,255,0.08)' }}>
-                  <Shield size={14} style={{ color: '#fcd34d' }} />
-                  <span>{bilingual('प्रशासनिक लॉगिन', 'Admin Portal')}</span>
-                </Link>
+                {isAdmin ? (
+                  <Link to="/admin" className="nav-link" style={{ marginLeft: '1rem', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(252,211,77,0.4)' }}>
+                    <Shield size={14} style={{ color: '#fcd34d' }} />
+                    <span style={{ color: '#fef08a', fontWeight: 700 }}>{bilingual('प्रशासन कक्ष', 'Admin Dashboard')}</span>
+                  </Link>
+                ) : (
+                  <Link to="/login" className="nav-link" style={{ marginLeft: '1rem', background: 'rgba(255,255,255,0.08)' }}>
+                    <Shield size={14} style={{ color: '#fcd34d' }} />
+                    <span>{bilingual('प्रशासनिक लॉगिन', 'Officer / Citizen Login')}</span>
+                  </Link>
+                )}
               </>
             ) : (
               <>
@@ -204,13 +213,55 @@ export default function Layout() {
                 </Link>
               </>
             )}
-            <span className="nav-demo-badge">
-              {bilingual('ई-सेवा 2026', 'E-Services 2026')}
+            <span className="nav-demo-badge" style={{ background: '#0284c7', color: '#fff' }}>
+              {bilingual('🔴 लाइव डेटाबेस', '🟢 Supabase Live')}
             </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.8rem', color: '#93c5fd' }}>
-            <span>📞 181 (Toll Free)</span>
+            {user ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ color: '#ffffff', fontSize: '0.78rem' }}>
+                  👤 {profile?.full_name || user.email?.split('@')[0]}
+                  {isAdmin && (
+                    <span style={{ marginLeft: 5, background: '#f59e0b', color: '#0f172a', padding: '1px 5px', borderRadius: 4, fontSize: '0.68rem', fontWeight: 800 }}>
+                      OFFICER
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => signOut()}
+                  style={{
+                    background: 'rgba(255,255,255,0.15)',
+                    border: 'none',
+                    color: '#ffffff',
+                    borderRadius: 4,
+                    padding: '2px 7px',
+                    cursor: 'pointer',
+                    fontSize: '0.72rem',
+                  }}
+                  title="Sign out"
+                >
+                  {bilingual('लॉगआउट', 'Sign Out')}
+                </button>
+              </div>
+            ) : (
+              <Link
+                to="/login"
+                style={{
+                  color: '#ffffff',
+                  textDecoration: 'none',
+                  background: 'rgba(255,255,255,0.12)',
+                  padding: '3px 8px',
+                  borderRadius: 4,
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                }}
+              >
+                🔐 {bilingual('लॉगिन', 'Login')}
+              </Link>
+            )}
           </div>
         </div>
       </nav>
