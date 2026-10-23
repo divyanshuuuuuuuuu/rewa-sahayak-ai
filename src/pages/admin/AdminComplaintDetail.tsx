@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Sparkles, Clock, Film, Video, Camera, Upload, CheckCircle2, Eye, EyeOff, MessageSquare, Download, Share2, PhoneCall } from 'lucide-react';
-import { getComplaintById, updateComplaintStatus, assignComplaint, updateComplaintPriority, syncFromSupabase } from '../../services/store';
+import { ArrowLeft, Sparkles, Clock, Film, Video, Camera, Upload, CheckCircle2, Eye, EyeOff, MessageSquare, Download, Share2, PhoneCall, HardHat, RotateCcw } from 'lucide-react';
+import { getComplaintById, updateComplaintStatus, assignComplaint, reopenComplaint, updateComplaintPriority, syncFromSupabase } from '../../services/store';
 import { uploadReportImage, getImageUrl } from '../../services/supabaseStore';
 import {
   getDepartmentWorkers,
@@ -29,6 +29,9 @@ export default function AdminComplaintDetail() {
   const [statusNote, setStatusNote] = useState('');
   const [assignDept, setAssignDept] = useState('');
   const [assignTo, setAssignTo] = useState('');
+  const [workerInstructions, setWorkerInstructions] = useState('');
+  const [reopenReason, setReopenReason] = useState('');
+  const [reopening, setReopening] = useState(false);
   const [newPriority, setNewPriority] = useState('');
   const [internalNote, setInternalNote] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -223,11 +226,35 @@ export default function AdminComplaintDetail() {
   const handleAssign = () => {
     if (!assignDept) return;
     const targetWorker = assignTo || selectedWorkerName || (workers[0] ? workers[0].name : '');
-    const updated = assignComplaint(complaint.id, assignDept, targetWorker);
+    const matchedWorker = workers.find(w => w.name === targetWorker);
+    const workerUserId = matchedWorker?.user_id || undefined;
+
+    const updated = assignComplaint(
+      complaint.id,
+      assignDept,
+      targetWorker,
+      workerInstructions.trim() || undefined,
+      workerUserId
+    );
     if (updated) {
       setComplaint({ ...updated });
       setAssignDept('');
       setAssignTo('');
+      setWorkerInstructions('');
+    }
+  };
+
+  const handleReopen = () => {
+    if (!reopenReason.trim() || !complaint) return;
+    setReopening(true);
+    try {
+      const updated = reopenComplaint(complaint.id, reopenReason.trim(), 'Admin Officer');
+      if (updated) {
+        setComplaint({ ...updated });
+        setReopenReason('');
+      }
+    } finally {
+      setReopening(false);
     }
   };
 
@@ -278,6 +305,46 @@ export default function AdminComplaintDetail() {
               <h3 className="detail-section-title">{bilingual('नागरिक द्वारा विवरण', 'Description')}</h3>
               <p style={{ color: '#1e293b', lineHeight: 1.7 }}>{complaint.description}</p>
             </div>
+
+            {/* Field Worker Execution & Progress */}
+            {(complaint.assigned_to || complaint.work_started_at || complaint.worker_instructions) && (
+              <div className="card" style={{
+                marginBottom: '1.25rem',
+                borderLeft: '4px solid ' + (complaint.status === 'RESOLVED' ? '#15803d' : complaint.work_started_at ? '#7e22ce' : '#d97706'),
+                background: complaint.status === 'RESOLVED' ? '#f0fdf4' : complaint.work_started_at ? '#faf5ff' : '#fffbeb'
+              }}>
+                <h3 className="detail-section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#0b3a6d' }}>
+                  <HardHat size={16} />
+                  <span>{bilingual('विभागीय फील्ड कर्मी कार्य प्रगति', 'Field Worker Execution & Progress')}</span>
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', fontSize: '0.88rem' }}>
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{bilingual('प्रभारी कर्मी:', 'Assigned Worker:')}</span>
+                    <p style={{ fontWeight: 700, margin: '0.2rem 0' }}>{complaint.assigned_to || 'Not assigned'}</p>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{bilingual('कार्य स्थिति:', 'Work Status:')}</span>
+                    <p style={{ margin: '0.2rem 0' }}>
+                      {complaint.status === 'RESOLVED' ? (
+                        <span style={{ color: '#15803d', fontWeight: 800 }}>✓ {bilingual('कार्य पूर्ण एवं सत्यापित', 'Work Completed & Resolved')}</span>
+                      ) : complaint.work_started_at ? (
+                        <span style={{ color: '#7e22ce', fontWeight: 800 }}>⚙️ {bilingual('स्थल पर कार्य प्रगति पर है', 'Work In Progress')} ({formatDateTime(complaint.work_started_at)})</span>
+                      ) : (
+                        <span style={{ color: '#d97706', fontWeight: 700 }}>⏳ {bilingual('कर्मी द्वारा कार्य प्रारंभ की प्रतीक्षा', 'Awaiting Worker to Start')}</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                {complaint.worker_instructions && (
+                  <div style={{ marginTop: '0.65rem', padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.85)', borderRadius: 6, border: '1px solid rgba(0,0,0,0.06)' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 700 }}>
+                      {bilingual('एडमिन द्वारा दिए गए निर्देश:', 'Admin Instructions to Worker:')}
+                    </span>
+                    <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#1e293b' }}>{complaint.worker_instructions}</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* AI */}
             <div className="card" style={{ marginBottom: '1.25rem', borderColor: '#bfdbfe' }}>
@@ -367,7 +434,7 @@ export default function AdminComplaintDetail() {
             {/* Completion Photo (Before vs After Evidence) */}
             <div className="card" style={{ borderColor: '#86efac', background: '#f0fdf4' }}>
               <h3 className="detail-section-title" style={{ color: '#166534' }}>
-                📸 {bilingual('समाधान फोटो (Completion Proof)', 'Completion Proof')}
+                📸 {bilingual('समाधान साक्ष्य (Completion Proof)', 'Completion Proof')}
               </h3>
               {complaint.video_url ? (
                 <div>
@@ -376,9 +443,51 @@ export default function AdminComplaintDetail() {
                     alt="Resolved Proof"
                     style={{ width: '100%', borderRadius: 8, maxHeight: 180, objectFit: 'cover', marginBottom: '0.5rem', border: '2px solid #22c55e' }}
                   />
-                  <div style={{ fontSize: '0.78rem', color: '#15803d', fontWeight: 700 }}>
-                    ✓ {bilingual('समाधान फोटो अपलोड है', 'Completion Photo Verified')}
+                  <div style={{ fontSize: '0.78rem', color: '#15803d', fontWeight: 700, marginBottom: '0.4rem' }}>
+                    ✓ {bilingual('स्थल समाधान फोटो सत्यापित', 'On-Site Completion Photo Verified')}
                   </div>
+                  {complaint.completed_by_name && (
+                    <div style={{ fontSize: '0.78rem', color: '#334155', marginBottom: '0.2rem' }}>
+                      <strong>{bilingual('समाधानकर्ता कर्मी:', 'Resolved By Worker:')}</strong> {complaint.completed_by_name}
+                    </div>
+                  )}
+                  {complaint.resolved_at && (
+                    <div style={{ fontSize: '0.74rem', color: '#64748b', marginBottom: '0.35rem' }}>
+                      <strong>{bilingual('समाधान समय:', 'Resolved At:')}</strong> {formatDateTime(complaint.resolved_at)}
+                    </div>
+                  )}
+                  {(complaint.completion_note || complaint.resolution_note) && (
+                    <div style={{ background: '#dcfce7', padding: '0.4rem 0.6rem', borderRadius: 6, fontSize: '0.8rem', color: '#166534', marginTop: '0.4rem' }}>
+                      <strong>{bilingual('कर्मी की रिपोर्ट:', 'Worker Note:')}</strong> {complaint.completion_note || complaint.resolution_note}
+                    </div>
+                  )}
+
+                  {/* Reopen Complaint Section */}
+                  {complaint.status === 'RESOLVED' && (
+                    <div style={{ marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px dashed #86efac' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#dc2626', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                        <RotateCcw size={14} />
+                        {bilingual('शिकायत पुनः खोलें (Reopen Complaint):', 'Reopen Complaint (Requires Reason):')}
+                      </label>
+                      <textarea
+                        className="form-input"
+                        placeholder={bilingual('पुनः खोलने का कारण दर्ज करें...', 'Enter mandatory reason for reopening...')}
+                        value={reopenReason}
+                        onChange={(e) => setReopenReason(e.target.value)}
+                        style={{ minHeight: '55px', marginBottom: '0.4rem', fontSize: '0.82rem' }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ width: '100%', justifyContent: 'center', background: '#dc2626', color: '#fff' }}
+                        onClick={handleReopen}
+                        disabled={!reopenReason.trim() || reopening}
+                      >
+                        <RotateCcw size={14} />
+                        {reopening ? bilingual('पुनः खोला जा रहा है...', 'Reopening...') : bilingual('शिकायत पुनः खोलें', 'Reopen Complaint')}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div>
@@ -431,7 +540,7 @@ export default function AdminComplaintDetail() {
 
             {/* Assign */}
             <div className="card">
-              <h3 className="detail-section-title">{bilingual('विभाग आवंटन', 'Assign Department')}</h3>
+              <h3 className="detail-section-title">{bilingual('विभाग एवं फील्ड कर्मी आवंटन', 'Assign Department & Worker')}</h3>
               <select
                 className="form-input"
                 value={assignDept}
@@ -481,8 +590,18 @@ export default function AdminComplaintDetail() {
                 onChange={(e) => setAssignTo(e.target.value)}
                 style={{ marginBottom: '0.5rem' }}
               />
+
+              {/* Instructions to worker */}
+              <textarea
+                className="form-input"
+                placeholder={bilingual('फील्ड कर्मी के लिए निर्देश / कार्य आदेश (Instructions for Worker)...', 'Instructions for field worker (optional)...')}
+                value={workerInstructions}
+                onChange={(e) => setWorkerInstructions(e.target.value)}
+                style={{ minHeight: '60px', marginBottom: '0.5rem', fontSize: '0.82rem' }}
+              />
+
               <button className="btn btn-secondary btn-sm" style={{ width: '100%', justifyContent: 'center', background: '#0b3a6d', color: '#fff' }} onClick={handleAssign} disabled={!assignDept}>
-                {bilingual('आवंटित करें', 'Assign')}
+                {bilingual('आवंटित करें एवं पोर्टल पर भेजें', 'Assign & Dispatch to Worker')}
               </button>
             </div>
 

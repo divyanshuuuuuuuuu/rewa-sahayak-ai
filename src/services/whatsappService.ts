@@ -11,6 +11,8 @@ export interface DepartmentWorker {
   name: string;
   designation: string;
   whatsapp_phone: string;
+  user_id?: string | null;
+  email?: string | null;
 }
 
 export interface NotificationRecord {

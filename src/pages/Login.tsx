@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Shield, User, Eye, EyeOff, Mail, Lock, UserPlus, KeyRound, LogOut } from "lucide-react";
 import { AshokaEmblem, RewaMunicipalLogo } from "../components/Emblem";
 import { useGov } from "../context/GovContext";
@@ -51,6 +51,9 @@ export default function Login() {
 
         if (prof?.role === "admin" || prof?.role === "superadmin") {
           navigate("/admin");
+          return;
+        } else if (prof?.role === "worker") {
+          navigate("/worker");
           return;
         }
       }
@@ -132,7 +135,16 @@ export default function Login() {
               {user.email}
             </div>
             <div style={{ display: "flex", gap: "0.5rem" }}>
-              {isAdmin ? (
+              {profile?.role === "worker" ? (
+                <button
+                  type="button"
+                  onClick={() => navigate("/worker")}
+                  className="btn btn-primary btn-sm"
+                  style={{ flex: 1, justifyContent: "center", background: "#f59e0b", color: "#000", fontWeight: 700 }}
+                >
+                  👷 {bilingual("वर्कर डैशबोर्ड खोलें", "Open Worker Dashboard")}
+                </button>
+              ) : isAdmin ? (
                 <button
                   type="button"
                   onClick={() => navigate("/admin")}
@@ -389,6 +401,36 @@ export default function Login() {
           <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
             <div>Email: <code style={{ color: "#0f172a" }}>admin@rewa.gov.in</code></div>
             <div>Password: <code style={{ color: "#0f172a" }}>Admin@Rewa2026!</code></div>
+          </div>
+        </div>
+
+        {/* Dedicated Department Worker Access */}
+        <div
+          style={{
+            marginTop: "0.85rem",
+            padding: "0.85rem",
+            background: "linear-gradient(135deg, #fef3c7, #fed7aa)",
+            borderRadius: 8,
+            border: "1px solid #f59e0b",
+            textAlign: "left",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem" }}>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: "0.82rem", color: "#92400e", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                👷 {bilingual("विभागीय फील्ड कर्मी पोर्टल", "Field Worker Portal")}
+              </div>
+              <div style={{ fontSize: "0.72rem", color: "#b45309", marginTop: "0.15rem" }}>
+                {bilingual("कार्य आदेश, स्टेटस व समाधान फोटो अपलोड", "Task orders, status & completion upload")}
+              </div>
+            </div>
+            <Link
+              to="/worker-login"
+              className="btn btn-secondary btn-sm"
+              style={{ background: "#b45309", color: "#fff", border: "none", fontWeight: 700, padding: "0.3rem 0.65rem", fontSize: "0.75rem" }}
+            >
+              {bilingual("वर्कर लॉगिन →", "Worker Login →")}
+            </Link>
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Shield, Home, PlusCircle, FileText, Map, PhoneCall, Globe, Building2 } from 'lucide-react';
+import { Shield, Home, PlusCircle, FileText, Map, PhoneCall, Globe, Building2, HardHat } from 'lucide-react';
 import { AshokaEmblem, RewaMunicipalLogo, SwachhBharatLogo } from './Emblem';
 import { useGov } from '../context/GovContext';
 import { useAuth } from '../context/AuthContext';
@@ -179,16 +179,27 @@ export default function Layout() {
                   <Building2 size={15} />
                   <span>{bilingual('पोर्टल परिचय', 'About Portal')}</span>
                 </Link>
-                {isAdmin ? (
+                {profile?.role === 'worker' ? (
+                  <Link to="/worker" className="nav-link" style={{ marginLeft: '1rem', background: 'rgba(245,158,11,0.25)', border: '1px solid rgba(245,158,11,0.6)' }}>
+                    <HardHat size={14} style={{ color: '#fcd34d' }} />
+                    <span style={{ color: '#fef08a', fontWeight: 700 }}>{bilingual('वर्कर पोर्टल', 'Worker Portal')}</span>
+                  </Link>
+                ) : isAdmin ? (
                   <Link to="/admin" className="nav-link" style={{ marginLeft: '1rem', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(252,211,77,0.4)' }}>
                     <Shield size={14} style={{ color: '#fcd34d' }} />
                     <span style={{ color: '#fef08a', fontWeight: 700 }}>{bilingual('प्रशासन कक्ष', 'Admin Dashboard')}</span>
                   </Link>
                 ) : (
-                  <Link to="/login" className="nav-link" style={{ marginLeft: '1rem', background: 'rgba(255,255,255,0.08)' }}>
-                    <Shield size={14} style={{ color: '#fcd34d' }} />
-                    <span>{bilingual('प्रशासनिक लॉगिन', 'Officer / Citizen Login')}</span>
-                  </Link>
+                  <div style={{ display: 'flex', gap: '0.4rem', marginLeft: '0.5rem' }}>
+                    <Link to="/worker-login" className="nav-link" style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)' }} title="Department Worker Portal">
+                      <HardHat size={14} style={{ color: '#fcd34d' }} />
+                      <span style={{ color: '#fef08a' }}>{bilingual('वर्कर', 'Worker')}</span>
+                    </Link>
+                    <Link to="/login" className="nav-link" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      <Shield size={14} style={{ color: '#fcd34d' }} />
+                      <span>{bilingual('प्रशासनिक लॉगिन', 'Officer / Citizen')}</span>
+                    </Link>
+                  </div>
                 )}
               </>
             ) : (
@@ -208,7 +219,11 @@ export default function Layout() {
                 <Link to="/admin/analytics" className={isActive('/admin/analytics')}>
                   <span>{bilingual('एनालिटिक्स एवं रिपोर्ट', 'Analytics & Reports')}</span>
                 </Link>
-                <Link to="/" className="nav-link" style={{ marginLeft: '1rem', background: 'rgba(255,255,255,0.1)' }}>
+                <Link to="/worker-login" className="nav-link" style={{ background: 'rgba(245,158,11,0.18)', border: '1px solid rgba(245,158,11,0.4)' }}>
+                  <HardHat size={14} style={{ color: '#fcd34d' }} />
+                  <span style={{ color: '#fef08a', fontWeight: 700 }}>{bilingual('वर्कर पोर्टल', 'Worker Portal')}</span>
+                </Link>
+                <Link to="/" className="nav-link" style={{ marginLeft: '0.5rem', background: 'rgba(255,255,255,0.1)' }}>
                   ← {bilingual('नागरिक पोर्टल', 'Citizen View')}
                 </Link>
               </>
@@ -226,6 +241,11 @@ export default function Layout() {
                   {isAdmin && (
                     <span style={{ marginLeft: 5, background: '#f59e0b', color: '#0f172a', padding: '1px 5px', borderRadius: 4, fontSize: '0.68rem', fontWeight: 800 }}>
                       OFFICER
+                    </span>
+                  )}
+                  {profile?.role === 'worker' && (
+                    <span style={{ marginLeft: 5, background: '#ea580c', color: '#ffffff', padding: '1px 5px', borderRadius: 4, fontSize: '0.68rem', fontWeight: 800 }}>
+                      WORKER
                     </span>
                   )}
                 </span>

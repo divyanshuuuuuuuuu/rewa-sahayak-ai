@@ -49,6 +49,13 @@ export interface Complaint {
   ai_confidence: number;
   assigned_department: string;
   assigned_to: string;
+  assigned_worker_id?: string | null;
+  worker_instructions?: string | null;
+  work_started_at?: string | null;
+  completion_note?: string | null;
+  completed_by?: string | null;
+  completed_by_name?: string | null;
+  resolved_at?: string | null;
   resolution_note: string;
   updates: ComplaintUpdate[];
 }

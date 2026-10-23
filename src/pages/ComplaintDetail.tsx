@@ -297,16 +297,62 @@ export default function ComplaintDetail() {
 
           {/* Sidebar Column */}
           <div className="detail-sidebar">
-            {/* Resolution Note if resolved */}
-            {complaint.resolution_note && (
-              <div className="card" style={{ borderColor: '#86efac', background: '#f0fdf4' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <CheckCircle2 size={18} color="#15803d" />
-                  <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#166534', margin: 0 }}>
-                    {bilingual('निराकरण रिपोर्ट (Resolution Note)', 'Resolution Report (Official Note)')}
-                  </h3>
+            {/* Department Official Resolution Response */}
+            {(complaint.status === 'RESOLVED' || complaint.video_url || complaint.resolution_note || complaint.completion_note) && (
+              <div className="card" style={{ borderColor: '#86efac', background: '#f0fdf4', boxShadow: '0 4px 12px rgba(22,101,52,0.08)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <CheckCircle2 size={18} color="#15803d" />
+                    <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#166534', margin: 0 }}>
+                      {bilingual('विभागीय समाधान उत्तर (Department Response)', 'Official Department Response')}
+                    </h3>
+                  </div>
+                  <span style={{ background: '#15803d', color: '#fff', fontSize: '0.65rem', fontWeight: 800, padding: '2px 7px', borderRadius: 4 }}>
+                    RESOLVED
+                  </span>
                 </div>
-                <p style={{ color: '#14532d', fontSize: '0.88rem', lineHeight: 1.6 }}>{complaint.resolution_note}</p>
+
+                {/* Completion Photograph Uploaded by Worker */}
+                {complaint.video_url && (
+                  <div style={{ marginBottom: '0.65rem' }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#166534', display: 'block', marginBottom: '0.25rem' }}>
+                      📸 {bilingual('कार्य समाप्ति की वास्तविक फोटो (Completion Photograph):', 'Completion Proof Photograph:')}
+                    </span>
+                    <img
+                      src={complaint.video_url}
+                      alt="Department Resolution Proof"
+                      style={{
+                        width: '100%',
+                        borderRadius: 8,
+                        maxHeight: 200,
+                        objectFit: 'cover',
+                        border: '2px solid #22c55e',
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div style={{ background: '#fff', padding: '0.65rem 0.85rem', borderRadius: 6, border: '1px solid #bbf7d0', marginBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, display: 'block' }}>
+                    {bilingual('विभागीय टिप्पणी / समाधान विवरण:', 'Department Response:')}
+                  </span>
+                  <p style={{ color: '#14532d', fontSize: '0.88rem', lineHeight: 1.5, margin: '0.2rem 0 0', fontWeight: 600 }}>
+                    "{complaint.completion_note || complaint.resolution_note || bilingual('स्थल पर समस्या का निवारण कर दिया गया है।', 'Issue has been successfully resolved on site.')}"
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.75rem', color: '#475569' }}>
+                  {complaint.completed_by_name && (
+                    <div>
+                      <strong>{bilingual('समाधानकर्ता कर्मी:', 'Resolved by:')}</strong> {complaint.completed_by_name}
+                    </div>
+                  )}
+                  {complaint.resolved_at && (
+                    <div>
+                      <strong>{bilingual('समाधान दिनांक व समय:', 'Resolved Date & Time:')}</strong> {formatDateTime(complaint.resolved_at)}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

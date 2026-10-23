@@ -100,6 +100,7 @@ export default function AdminComplaints() {
                 <th>{bilingual('विभाग', 'Module')}</th>
                 <th>{bilingual('प्राथमिकता', 'Priority')}</th>
                 <th>{bilingual('स्थान / पता', 'Location')}</th>
+                <th>{bilingual('प्रभारी कर्मी', 'Assigned Worker')}</th>
                 <th>{bilingual('स्थिति', 'Status')}</th>
                 <th>{bilingual('पंजीकृत दिनांक', 'Created')}</th>
                 <th>{bilingual('कार्रवाई', 'Action')}</th>
@@ -108,7 +109,7 @@ export default function AdminComplaints() {
             <tbody>
               {complaints.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '2rem' }}>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: '2rem' }}>
                     {bilingual('कोई शिकायत उपलब्ध नहीं है।', 'No complaints match filters.')}
                   </td>
                 </tr>
@@ -121,6 +122,9 @@ export default function AdminComplaints() {
                     <td><span className="badge" style={{ background: `${moduleColors[c.module]}22`, color: moduleColors[c.module] }}>{moduleLabel(c.module)}</span></td>
                     <td><span className="badge" style={{ background: `${severityColors[c.severity]}22`, color: severityColors[c.severity] }}>{c.severity}</span></td>
                     <td style={{ fontSize: '0.8rem', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.address || '—'}</td>
+                    <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap', fontWeight: 600, color: c.assigned_to ? '#0b3a6d' : '#94a3b8' }}>
+                      {c.assigned_to ? `👷 ${c.assigned_to}` : '—'}
+                    </td>
                     <td><span className="badge" style={{ background: `${statusColors[c.status]}22`, color: statusColors[c.status] }}>● {statusLabel(c.status)}</span></td>
                     <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{formatDate(c.created_at)}</td>
                     <td><Link to={`/admin/complaints/${c.id}`} className="btn btn-primary btn-sm" style={{ padding: '0.2rem 0.6rem' }}>{bilingual('प्रबंधन', 'Manage')}</Link></td>

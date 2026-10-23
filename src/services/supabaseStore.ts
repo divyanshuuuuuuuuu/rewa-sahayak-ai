@@ -1,4 +1,4 @@
-﻿// Supabase-backed data store — replaces localStorage store.ts for production
+// Supabase-backed data store — replaces localStorage store.ts for production
 import { supabase } from "./supabase";
 import type { ComplaintStatus } from "../types";
 
@@ -306,24 +306,30 @@ export async function adminAssignReport(
   reportId: string,
   departmentName: string,
   assignedTo: string,
-  adminName = "Admin Officer"
+  adminName = "Admin Officer",
+  workerInstructions?: string,
+  assignedWorkerId?: string
 ): Promise<{ error: string | null }> {
   const { data: { user } } = await supabase.auth.getUser();
 
+  const updateData: Record<string, any> = {
+    assigned_department_name: departmentName,
+    assigned_to: assignedTo,
+    current_status: "ASSIGNED",
+  };
+  if (workerInstructions) updateData.worker_instructions = workerInstructions;
+  if (assignedWorkerId) updateData.assigned_worker_id = assignedWorkerId;
+
   const { error: updateError } = await supabase
     .from("citizen_reports")
-    .update({
-      assigned_department_name: departmentName,
-      assigned_to: assignedTo,
-      current_status: "ASSIGNED",
-    })
+    .update(updateData)
     .eq("id", reportId);
 
   if (updateError) return { error: updateError.message };
 
   const { data: current } = await supabase
     .from("citizen_reports")
-    .select("current_status")
+    .select("current_status, title, location_description")
     .eq("id", reportId)
     .single();
 
@@ -331,10 +337,66 @@ export async function adminAssignReport(
     report_id: reportId,
     previous_status: current?.current_status ?? "SUBMITTED",
     new_status: "ASSIGNED",
-    public_message: `Report assigned to ${departmentName}${assignedTo ? " — " + assignedTo : ""}.`,
+    public_message: `Report assigned to ${departmentName}${assignedTo ? " — " + assignedTo : ""}.${workerInstructions ? ' Instructions: ' + workerInstructions : ''}`,
     changed_by: user?.id ?? null,
     changed_by_name: adminName,
   });
+
+  if (assignedWorkerId) {
+    await supabase.from("worker_notifications").insert({
+      worker_id: assignedWorkerId,
+      report_id: reportId,
+      title: `New Assignment: ${current?.title ?? 'Complaint'}`,
+      message: `Assigned in ${current?.location_description ?? 'Rewa'}.${workerInstructions ? ' Instructions: ' + workerInstructions : ''}`,
+      type: "assignment",
+    });
+  }
+
+  return { error: null };
+}
+
+// ─── ADMIN: Reopen report ─────────────────────────────────────────────────────
+export async function adminReopenReport(
+  reportId: string,
+  reason: string,
+  adminName = "Admin Officer"
+): Promise<{ error: string | null }> {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data: current } = await supabase
+    .from("citizen_reports")
+    .select("current_status, assigned_worker_id, title")
+    .eq("id", reportId)
+    .single();
+
+  const { error: updateError } = await supabase
+    .from("citizen_reports")
+    .update({
+      current_status: "ASSIGNED",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", reportId);
+
+  if (updateError) return { error: updateError.message };
+
+  await supabase.from("report_status_history").insert({
+    report_id: reportId,
+    previous_status: current?.current_status ?? "RESOLVED",
+    new_status: "ASSIGNED",
+    public_message: `Report reopened by ${adminName}: ${reason}`,
+    changed_by: user?.id ?? null,
+    changed_by_name: adminName,
+  });
+
+  if (current?.assigned_worker_id) {
+    await supabase.from("worker_notifications").insert({
+      worker_id: current.assigned_worker_id,
+      report_id: reportId,
+      title: `Task Reopened: ${current.title}`,
+      message: `Reopened by Admin: ${reason}`,
+      type: "reopened",
+    });
+  }
 
   return { error: null };
 }

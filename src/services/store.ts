@@ -68,6 +68,13 @@ export function dbReportToComplaint(r: any, history: any[] = []): Complaint {
     ai_confidence: r.ai_confidence || 0.92,
     assigned_department: r.assigned_department_name || '',
     assigned_to: r.assigned_to || '',
+    assigned_worker_id: r.assigned_worker_id || null,
+    worker_instructions: r.worker_instructions || null,
+    work_started_at: r.work_started_at || null,
+    completion_note: r.completion_note || null,
+    completed_by: r.completed_by || null,
+    completed_by_name: r.completed_by_name || null,
+    resolved_at: r.resolved_at || null,
     resolution_note: r.resolution_note || '',
     updates,
   };
@@ -327,7 +334,9 @@ export function updateComplaintStatus(
 export function assignComplaint(
   id: string,
   department: string,
-  assignedTo: string
+  assignedTo: string,
+  workerInstructions?: string,
+  assignedWorkerId?: string
 ): Complaint | undefined {
   const complaints = getAllComplaints();
   const idx = complaints.findIndex(c => c.id === id || c.ticket_number === id);
@@ -338,6 +347,8 @@ export function assignComplaint(
 
   complaints[idx].assigned_department = department;
   complaints[idx].assigned_to = assignedTo;
+  if (assignedWorkerId) complaints[idx].assigned_worker_id = assignedWorkerId;
+  if (workerInstructions) complaints[idx].worker_instructions = workerInstructions;
   complaints[idx].updated_at = now;
 
   if (complaints[idx].status === 'SUBMITTED' || complaints[idx].status === 'UNDER_REVIEW') {
@@ -346,7 +357,7 @@ export function assignComplaint(
       id: uuidv4(),
       complaint_id: targetId,
       status: 'ASSIGNED',
-      note: `Assigned to ${department}${assignedTo ? ' — ' + assignedTo : ''}`,
+      note: `Assigned to ${department}${assignedTo ? ' — ' + assignedTo : ''}${workerInstructions ? ' (Instructions: ' + workerInstructions + ')' : ''}`,
       updated_by: 'Admin Officer',
       created_at: now,
     });
@@ -360,14 +371,18 @@ export function assignComplaint(
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
+      const updateData: Record<string, any> = {
+        assigned_department_name: department,
+        assigned_to: assignedTo,
+        current_status: 'ASSIGNED',
+        updated_at: now,
+      };
+      if (assignedWorkerId) updateData.assigned_worker_id = assignedWorkerId;
+      if (workerInstructions) updateData.worker_instructions = workerInstructions;
+
       await supabase
         .from('citizen_reports')
-        .update({
-          assigned_department_name: department,
-          assigned_to: assignedTo,
-          current_status: 'ASSIGNED',
-          updated_at: now,
-        })
+        .update(updateData)
         .eq('id', targetId);
 
       await supabase.from('report_assignments').insert({
@@ -385,8 +400,85 @@ export function assignComplaint(
         changed_by: user?.id ?? null,
         changed_by_name: 'Admin Officer',
       });
+
+      // Insert in-app notification for the worker
+      if (assignedWorkerId) {
+        await supabase.from('worker_notifications').insert({
+          worker_id: assignedWorkerId,
+          report_id: targetId,
+          title: `New Assignment: ${complaints[idx].title}`,
+          message: `You have been assigned to resolve "${complaints[idx].title}" in ${complaints[idx].address}.${workerInstructions ? ' Note: ' + workerInstructions : ''}`,
+          type: 'assignment',
+        });
+      }
     } catch (e) {
       console.error('Failed to assign report in Supabase:', e);
+    }
+  })();
+
+  return complaints[idx];
+}
+
+export function reopenComplaint(
+  id: string,
+  reason: string,
+  reopenedBy = 'Admin Officer'
+): Complaint | undefined {
+  const complaints = getAllComplaints();
+  const idx = complaints.findIndex(c => c.id === id || c.ticket_number === id);
+  if (idx === -1) return undefined;
+
+  const now = new Date().toISOString();
+  const targetId = complaints[idx].id;
+  const prevStatus = complaints[idx].status;
+
+  complaints[idx].status = 'ASSIGNED';
+  complaints[idx].updated_at = now;
+  complaints[idx].updates.push({
+    id: uuidv4(),
+    complaint_id: targetId,
+    status: 'ASSIGNED',
+    note: `Complaint Reopened: ${reason}`,
+    updated_by: reopenedBy,
+    created_at: now,
+  });
+
+  memoryComplaints = complaints;
+  saveComplaintsToStorage(complaints);
+
+  (async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      await supabase
+        .from('citizen_reports')
+        .update({
+          current_status: 'ASSIGNED',
+          updated_at: now,
+        })
+        .eq('id', targetId);
+
+      await supabase.from('report_status_history').insert({
+        report_id: targetId,
+        previous_status: prevStatus,
+        new_status: 'ASSIGNED',
+        public_message: `Complaint reopened by Admin: ${reason}`,
+        changed_by: user?.id ?? null,
+        changed_by_name: reopenedBy,
+      });
+
+      // Notify assigned worker if present
+      if (complaints[idx].assigned_worker_id) {
+        await supabase.from('worker_notifications').insert({
+          worker_id: complaints[idx].assigned_worker_id,
+          report_id: targetId,
+          title: `Complaint Reopened: ${complaints[idx].title}`,
+          message: `Admin reopened this task. Reason: ${reason}`,
+          type: 'reopened',
+        });
+      }
+    } catch (e) {
+      console.error('Failed to reopen complaint in Supabase:', e);
     }
   })();
 

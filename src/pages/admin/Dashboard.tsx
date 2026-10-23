@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { AlertTriangle, CheckCircle, Clock, FileText, TrendingUp, ArrowRight, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, FileText, TrendingUp, ArrowRight, ShieldCheck, HardHat, UserCheck, Building2 } from 'lucide-react';
 import { getStats, getAllComplaints, syncFromSupabase } from '../../services/store';
+import { getDepartmentWorkers } from '../../services/whatsappService';
 import { statusLabels, statusColors, moduleNames, moduleColors, categoryIcons, severityColors } from '../../services/ai';
 import { AshokaEmblem } from '../../components/Emblem';
 import { useGov } from '../../context/GovContext';
@@ -10,6 +11,7 @@ import { useGov } from '../../context/GovContext';
 export default function AdminDashboard() {
   const [stats, setStats] = useState(getStats());
   const [complaints, setComplaints] = useState(getAllComplaints());
+  const [workerCount, setWorkerCount] = useState(7);
   const recent = complaints.slice(0, 8);
   const { lang, bilingual, statusLabel, moduleLabel, categoryLabel } = useGov();
 
@@ -18,13 +20,26 @@ export default function AdminDashboard() {
       setStats(getStats());
       setComplaints(getAllComplaints());
     });
+    getDepartmentWorkers().then((w) => setWorkerCount(w.length));
     const onUpdate = () => {
       setStats(getStats());
       setComplaints(getAllComplaints());
+      getDepartmentWorkers().then((w) => setWorkerCount(w.length));
     };
     window.addEventListener('rewa_store_updated', onUpdate);
     return () => window.removeEventListener('rewa_store_updated', onUpdate);
   }, []);
+
+  // Department-wise Complaint Counts
+  const deptData = complaints.reduce((acc: Record<string, number>, c) => {
+    const dept = c.assigned_department || 'Unassigned';
+    acc[dept] = (acc[dept] || 0) + 1;
+    return acc;
+  }, {});
+
+  const departmentChartData = Object.entries(deptData)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
 
   // Chart data
   const categoryData = Object.entries(stats.by_category)
@@ -79,13 +94,19 @@ export default function AdminDashboard() {
             </p>
           </div>
 
-          <Link to="/" className="btn btn-secondary btn-sm">
-            ← {lang === 'hi' ? 'नागरिक पोर्टल देखें' : 'Citizen Portal'}
-          </Link>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <Link to="/worker-login" className="btn btn-secondary btn-sm" style={{ borderColor: '#f59e0b', color: '#b45309' }}>
+              <HardHat size={14} />
+              {lang === 'hi' ? 'वर्कर पोर्टल' : 'Worker Portal'}
+            </Link>
+            <Link to="/" className="btn btn-secondary btn-sm">
+              ← {lang === 'hi' ? 'नागरिक पोर्टल' : 'Citizen Portal'}
+            </Link>
+          </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
+        {/* Live Supabase Stats Grid (6 cards fulfilling all requirements) */}
+        <div className="stats-grid" style={{ marginBottom: '1.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
           <div className="stat-card">
             <FileText size={22} color="#0b3a6d" style={{ marginBottom: '0.4rem' }} />
             <div className="stat-value" style={{ color: '#0b3a6d' }}>{stats.total}</div>
@@ -94,17 +115,27 @@ export default function AdminDashboard() {
           <div className="stat-card">
             <Clock size={22} color="#d97706" style={{ marginBottom: '0.4rem' }} />
             <div className="stat-value" style={{ color: '#d97706' }}>{stats.submitted + stats.under_review}</div>
-            <div className="stat-label">{lang === 'hi' ? 'प्रतीक्षारत' : 'Pending'}</div>
+            <div className="stat-label">{lang === 'hi' ? 'प्रतीक्षारत' : 'Pending Complaints'}</div>
           </div>
           <div className="stat-card">
-            <TrendingUp size={22} color="#0284c7" style={{ marginBottom: '0.4rem' }} />
-            <div className="stat-value" style={{ color: '#0284c7' }}>{stats.in_progress + stats.assigned}</div>
-            <div className="stat-label">{lang === 'hi' ? 'कार्रवाई जारी' : 'In Progress'}</div>
+            <TrendingUp size={22} color="#2563eb" style={{ marginBottom: '0.4rem' }} />
+            <div className="stat-value" style={{ color: '#2563eb' }}>{stats.assigned}</div>
+            <div className="stat-label">{lang === 'hi' ? 'आवंटित शिकायतें' : 'Assigned Complaints'}</div>
+          </div>
+          <div className="stat-card">
+            <TrendingUp size={22} color="#7c3aed" style={{ marginBottom: '0.4rem' }} />
+            <div className="stat-value" style={{ color: '#7c3aed' }}>{stats.in_progress}</div>
+            <div className="stat-label">{lang === 'hi' ? 'कार्य प्रगति पर' : 'Work In Progress'}</div>
           </div>
           <div className="stat-card">
             <CheckCircle size={22} color="#15803d" style={{ marginBottom: '0.4rem' }} />
             <div className="stat-value" style={{ color: '#15803d' }}>{stats.resolved + stats.closed}</div>
-            <div className="stat-label">{lang === 'hi' ? 'निराकृत' : 'Resolved'}</div>
+            <div className="stat-label">{lang === 'hi' ? 'निराकृत' : 'Resolved Complaints'}</div>
+          </div>
+          <div className="stat-card">
+            <HardHat size={22} color="#ea580c" style={{ marginBottom: '0.4rem' }} />
+            <div className="stat-value" style={{ color: '#ea580c' }}>{workerCount}</div>
+            <div className="stat-label">{lang === 'hi' ? 'पंजीकृत कर्मी' : 'Registered Workers'}</div>
           </div>
         </div>
 
@@ -173,6 +204,23 @@ export default function AdminDashboard() {
                 <Tooltip contentStyle={tooltipStyle} />
               </PieChart>
             </ResponsiveContainer>
+          </div>
+
+          {/* Department-wise Complaint Counts */}
+          <div className="chart-card">
+            <div className="chart-title">
+              {lang === 'hi' ? 'विभागीय आवंटन विवरण' : 'Department-wise Complaint Counts'}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: 250, overflowY: 'auto' }}>
+              {departmentChartData.map((d) => (
+                <div key={d.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0.65rem', background: '#f8fafc', borderRadius: 6, fontSize: '0.82rem' }}>
+                  <span style={{ fontWeight: 600, color: '#334155' }}>{d.name}</span>
+                  <span style={{ background: '#0b3a6d', color: '#fff', borderRadius: 12, padding: '2px 8px', fontSize: '0.75rem', fontWeight: 700 }}>
+                    {d.value}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
