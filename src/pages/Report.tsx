@@ -12,6 +12,7 @@ import type { AIAnalysis, CivicMedia } from '../types';
 import MapView from '../components/MapView';
 import { AshokaEmblem, RewaMunicipalLogo } from '../components/Emblem';
 import { useGov } from '../context/GovContext';
+import { reverseGeocode, forwardGeocode } from '../services/geocode';
 
 type InputMode = 'voice' | 'photo' | 'text';
 type ReportStep = 'input' | 'processing' | 'preview' | 'submitted';
@@ -33,6 +34,8 @@ export default function Report() {
   const [selectedQuickProblem, setSelectedQuickProblem] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [quickNotice, setQuickNotice] = useState<string | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationStatus, setLocationStatus] = useState<string | null>(null);
   const locationInputRef = useRef<HTMLInputElement>(null);
   const evidenceSectionRef = useRef<HTMLDivElement>(null);
   const [showMap, setShowMap] = useState(false);
@@ -297,51 +300,114 @@ export default function Report() {
   };
 
   // Location Handlers
+  // Location Handlers (Genuine Real-Time GPS & Reverse Geocoding)
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
-      alert(bilingual('जियोलोकेशन समर्थित नहीं है।', 'Geolocation not supported by browser.'));
+      const msg = bilingual(
+        'आपके ब्राउज़र में जियोलोकेशन (GPS) सुविधा समर्थित नहीं है।',
+        'Geolocation is not supported by your browser.'
+      );
+      setFormError(msg);
+      alert(msg);
       return;
     }
+
+    setIsLocating(true);
+    setLocationStatus(
+      bilingual('📍 वास्तविक लाइव GPS सिग्नल खोज रहे हैं...', '📍 Acquiring Live GPS Location...')
+    );
+    setFormError(null);
+
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
+        const accuracy = Math.round(pos.coords.accuracy || 0);
+
+        // Update exact real coordinates immediately
         setLocation([lat, lng]);
-        setAddress(
+        const coordLabel = `${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E`;
+        setAddress(`GPS: ${coordLabel}`);
+        setLocationStatus(
           bilingual(
-            `वार्ड 12, सिरमौर चौराहा, रीवा (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
-            `Ward 12, Sirmour Chowk, Rewa (${lat.toFixed(4)}, ${lng.toFixed(4)})`
+            `📍 GPS प्राप्त (${coordLabel}) • सटीकता ~${accuracy}m... वास्तविक पता खोज रहे हैं...`,
+            `📍 GPS Locked (${coordLabel}) • Acc ~${accuracy}m... Resolving address...`
           )
         );
-        setShowMap(false);
-        setFormError(null);
+
+        // Fetch genuine address via reverse geocoding
+        try {
+          const resolvedAddress = await reverseGeocode(lat, lng);
+          const fullAddress = `${resolvedAddress} (${coordLabel})`;
+          setAddress(fullAddress);
+          setLocationStatus(
+            bilingual(
+              `✓ लाइव GPS सत्यापित: ${resolvedAddress}`,
+              `✓ Live GPS Verified: ${resolvedAddress}`
+            )
+          );
+        } catch {
+          setAddress(`GPS: ${coordLabel}`);
+          setLocationStatus(
+            bilingual(`✓ लाइव GPS निर्देशांक सुरक्षित (${coordLabel})`, `✓ Live GPS Coordinates Logged (${coordLabel})`)
+          );
+        } finally {
+          setIsLocating(false);
+        }
       },
-      () => {
-        setLocation([24.5373, 81.3005]);
-        setAddress(
-          bilingual('वार्ड 12, सिरमौर चौराहा, रीवा (GPS पिन)', 'Ward 12, Sirmour Chowk, Rewa (GPS Pin)')
+      (err) => {
+        setIsLocating(false);
+        setLocationStatus(null);
+        let errorMsg = bilingual(
+          'GPS सिग्नल प्राप्त नहीं हो सका। कृपया अपना स्थान लिखें या नीचे मैप/वार्ड से चुनें।',
+          'Could not get GPS signal. Please type your location or pick on map/ward below.'
         );
-        setShowMap(false);
-        setFormError(null);
+        if (err.code === 1) {
+          errorMsg = bilingual(
+            '⚠️ GPS लोकेशन अनुमति अस्वीकृत (Permission Denied)। आपके ब्राउज़र ने लोकेशन ब्लॉक की है। कृपया ब्राउज़र सेटिंग्स में लोकेशन अनुमति (Allow Location) चालू करें, या नीचे से वार्ड चुनें / अपना पता टाइप करें।',
+            '⚠️ Location permission denied by your browser. Please allow location access in browser settings, or select your ward / type address below.'
+          );
+        } else if (err.code === 2) {
+          errorMsg = bilingual(
+            '⚠️ GPS सिग्नल अनुपलब्ध है। कृपया अपना पता टाइप करें या मैप पर बिंदु चुनें।',
+            '⚠️ GPS signal unavailable. Please type your address or select on map.'
+          );
+        } else if (err.code === 3) {
+          errorMsg = bilingual(
+            '⚠️ GPS प्राप्त करने में समय समाप्त हो गया। कृपया पुनः प्रयास करें।',
+            '⚠️ GPS request timed out. Please try again.'
+          );
+        }
+        setFormError(errorMsg);
+        alert(errorMsg);
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      }
     );
   };
 
-  const handleMapSelect = (lat: number, lng: number) => {
+  const handleMapSelect = async (lat: number, lng: number) => {
     setLocation([lat, lng]);
-    setAddress(
-      bilingual(
-        `रीवा नगर निगम क्षेत्र (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
-        `Rewa Municipal Area (${lat.toFixed(4)}, ${lng.toFixed(4)})`
-      )
-    );
+    const coordLabel = `${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E`;
+    setAddress(`मैप स्थान: ${coordLabel}`);
+    setLocationStatus(bilingual(`मैप पिन: ${coordLabel}`, `Map Pin: ${coordLabel}`));
     setFormError(null);
+    try {
+      const resolved = await reverseGeocode(lat, lng);
+      setAddress(`${resolved} (${coordLabel})`);
+      setLocationStatus(bilingual(`✓ मैप स्थान: ${resolved}`, `✓ Map Location: ${resolved}`));
+    } catch {
+      setAddress(`मैप स्थान (${coordLabel})`);
+    }
   };
 
   const handleWardSelect = (wardName: string, coords: [number, number]) => {
     setAddress(wardName + (wardName.includes('रीवा') ? '' : ', रीवा'));
     setLocation(coords);
+    setLocationStatus(bilingual(`✓ वार्ड चयनित: ${wardName}`, `✓ Ward Selected: ${wardName}`));
     setFormError(null);
   };
 
@@ -377,10 +443,10 @@ export default function Report() {
     }
 
     // 3. MANDATORY INCIDENT LOCATION (Strict Anti-Fraud)
-    if (!hasLocation) {
+    if (!address.trim() || address.trim().length < 4) {
       const msg = bilingual(
-        '📍 घटना स्थल लोकेशन अनिवार्य है!\n\nरीवा नगर निगम के नियमों के अनुसार बिना सही स्थान व वार्ड के शिकायत दर्ज नहीं की जा सकती।\n\nकृपया नीचे दिए गए इनपुट में वार्ड/स्थान लिखें या "मेरी GPS लोकेशन लें" / "मैप पर चुनें" बटन दबाएं।',
-        '📍 Incident Location is Compulsory!\n\nAs per Rewa Municipal regulations, a complaint cannot be registered without incident location and ward.\n\nPlease type your Ward/Address below or tap "Auto GPS Location" / "Select on Map".'
+        '📍 घटना स्थल लोकेशन अनिवार्य है!\n\nरीवा नगर निगम के नियमों के अनुसार बिना सही स्थान व वार्ड के शिकायत दर्ज नहीं की जा सकती।\n\nकृपया नीचे दिए गए इनपुट में वार्ड/स्थान लिखें या "मेरी लाइव GPS लोकेशन लें" / "मैप पर चुनें" बटन दबाएं।',
+        '📍 Incident Location is Compulsory!\n\nAs per Rewa Municipal regulations, a complaint cannot be registered without incident location and ward.\n\nPlease type your Ward/Address below or tap "Use My Live GPS" / "Select on Map".'
       );
       setFormError(bilingual(
         '📍 घटना स्थल लोकेशन अनिवार्य है! कृपया नीचे वार्ड/पता लिखें या GPS/मैप से चुनें।',
@@ -389,6 +455,19 @@ export default function Report() {
       alert(msg);
       locationInputRef.current?.focus();
       return;
+    }
+
+    if (!location) {
+      try {
+        const geo = await forwardGeocode(address);
+        if (geo) {
+          setLocation(geo.coords);
+        } else {
+          setLocation([24.5373, 81.3005]);
+        }
+      } catch {
+        setLocation([24.5373, 81.3005]);
+      }
     }
 
     setStep('processing');
@@ -931,14 +1010,24 @@ export default function Report() {
                   value={address}
                   onChange={(e) => {
                     setAddress(e.target.value);
-                    if (!location && e.target.value.trim().length > 3) {
-                      setLocation([24.5373, 81.3005]);
-                    }
                     setFormError(null);
                   }}
+                  onBlur={async () => {
+                    if (!location && address.trim().length >= 4) {
+                      try {
+                        const geo = await forwardGeocode(address);
+                        if (geo) {
+                          setLocation(geo.coords);
+                          setLocationStatus(bilingual(`✓ पता सत्यापित: ${geo.address}`, `✓ Address Verified: ${geo.address}`));
+                        }
+                      } catch {
+                        // ignore error on blur
+                      }
+                    }
+                  }}
                   placeholder={bilingual(
-                    'वार्ड नंबर, मोहल्ला व लैंडमार्क लिखें (उदा. वार्ड 12, सिरमौर चौराहा, रीवा)...',
-                    'Enter Ward Number, Street, Landmark (e.g. Ward 12, Sirmour Chowk, Rewa)...'
+                    'वार्ड नंबर, मोहल्ला व लैंडमार्क लिखें (उदा. सिविल लाइन्स, सिरमौर चौराहा, या अपना वर्तमान स्थान)...',
+                    'Enter Ward, Street, Landmark or your current location (e.g. Civil Lines, Rewa)...'
                   )}
                   style={{
                     width: '100%',
@@ -954,15 +1043,29 @@ export default function Report() {
               </div>
 
               {/* Location Action Buttons */}
-              <div className="location-bar" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.65rem' }}>
+              <div className="location-bar" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
                   onClick={getCurrentLocation}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: '#eff6ff', borderColor: '#93c5fd', color: '#1e40af', fontWeight: 800 }}
+                  disabled={isLocating}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    background: isLocating ? '#dbeafe' : '#eff6ff',
+                    borderColor: '#93c5fd',
+                    color: '#1e40af',
+                    fontWeight: 800,
+                    cursor: isLocating ? 'wait' : 'pointer'
+                  }}
                 >
-                  <Navigation size={14} color="#1d4ed8" />
-                  <span>{bilingual('मेरी GPS लोकेशन लें (Auto GPS)', 'Use My GPS Location')}</span>
+                  <Navigation size={14} color="#1d4ed8" style={{ animation: isLocating ? 'spin 1s linear infinite' : 'none' }} />
+                  <span>
+                    {isLocating
+                      ? bilingual('GPS सिग्नल ले रहे हैं...', 'Acquiring GPS...')
+                      : bilingual('मेरी लाइव GPS लोकेशन लें (Live GPS)', 'Use My Live GPS')}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -973,12 +1076,24 @@ export default function Report() {
                   <MapPin size={14} color="#ea580c" />
                   <span>{showMap ? bilingual('मैप छुपाएं', 'Hide Map') : bilingual('मैप पर चुनें', 'Select on Map')}</span>
                 </button>
-                {address && (
-                  <span className="location-text" style={{ fontSize: '0.82rem', fontWeight: 700, color: '#15803d' }}>
-                    📍 {address}
-                  </span>
-                )}
               </div>
+
+              {/* Live Location / GPS Status Feedback */}
+              {locationStatus && (
+                <div style={{
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  color: locationStatus.includes('⚠️') ? '#b91c1c' : '#15803d',
+                  marginBottom: '0.5rem',
+                  background: locationStatus.includes('⚠️') ? '#fef2f2' : '#f0fdf4',
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  border: locationStatus.includes('⚠️') ? '1px solid #fecaca' : '1px solid #bbf7d0',
+                  display: 'inline-block'
+                }}>
+                  {locationStatus}
+                </div>
+              )}
 
               {/* Rewa Municipal Wards Quick Selector Chips */}
               <div style={{ marginTop: '0.5rem' }}>
@@ -1010,14 +1125,17 @@ export default function Report() {
 
               {showMap && (
                 <div style={{ marginTop: '0.85rem', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden' }}>
+                  <div style={{ padding: '0.4rem 0.75rem', background: '#f1f5f9', fontSize: '0.75rem', color: '#475569', fontWeight: 600, borderBottom: '1px solid #cbd5e1' }}>
+                    💡 {bilingual('मैप पर कहीं भी क्लिक करके या पिन ड्रैग करके सही लोकेशन चुनें', 'Click anywhere on map or drag pin to select accurate spot')}
+                  </div>
                   <MapView
                     complaints={[]}
                     selectable
                     selectedPos={location}
                     onSelect={handleMapSelect}
-                    height="220px"
+                    height="240px"
                     center={location || [24.5373, 81.3005]}
-                    zoom={location ? 15 : 13}
+                    zoom={location ? 16 : 13}
                   />
                 </div>
               )}
