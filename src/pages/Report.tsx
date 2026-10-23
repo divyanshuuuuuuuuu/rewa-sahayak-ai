@@ -28,10 +28,13 @@ export default function Report() {
   const [mediaList, setMediaList] = useState<CivicMedia[]>([]);
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [imageAnalysis, setImageAnalysis] = useState<any>(null);
-  const [location, setLocation] = useState<[number, number] | null>([24.5373, 81.3005]);
-  const [address, setAddress] = useState(
-    lang === 'hi' ? 'वार्ड क्र. 12, सिरमौर चौराहा, रीवा' : 'Ward No. 12, Sirmour Chowk, Rewa'
-  );
+  const [location, setLocation] = useState<[number, number] | null>(null);
+  const [address, setAddress] = useState<string>('');
+  const [selectedQuickProblem, setSelectedQuickProblem] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [quickNotice, setQuickNotice] = useState<string | null>(null);
+  const locationInputRef = useRef<HTMLInputElement>(null);
+  const evidenceSectionRef = useRef<HTMLDivElement>(null);
   const [showMap, setShowMap] = useState(false);
   const [ticketNumber, setTicketNumber] = useState('');
   const multiFileInputRef = useRef<HTMLInputElement>(null);
@@ -39,12 +42,23 @@ export default function Report() {
   const cameraVideoInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
 
-  // Derived media values
+  // Derived media values & anti-fraud validation
   const photoCount = mediaList.filter((m) => m.type === 'image').length;
   const videoCount = mediaList.filter((m) => m.type === 'video').length;
+  const hasPhoto = photoCount > 0 || !!imageFile;
+  const hasLocation = !!(address.trim().length >= 4 && location);
   const hasMedia = mediaList.length > 0;
   const imagePreview = mediaList.find((m) => m.type === 'image')?.url || mediaList[0]?.url || null;
   const videoUrl = mediaList.find((m) => m.type === 'video')?.url || null;
+
+  const rewaWards = [
+    { name: 'वार्ड 12 - सिरमौर चौराहा', coords: [24.5373, 81.3005] as [number, number] },
+    { name: 'वार्ड 15 - ढेकहा तिराहा', coords: [24.5420, 81.2950] as [number, number] },
+    { name: 'वार्ड 18 - सिविल लाइन्स', coords: [24.5310, 81.3030] as [number, number] },
+    { name: 'वार्ड 3 - उर्रहट बस स्टैंड', coords: [24.5340, 81.2915] as [number, number] },
+    { name: 'वार्ड 7 - बोदाबाग रोड', coords: [24.5260, 81.2880] as [number, number] },
+    { name: 'वार्ड 24 - किला चौराहा', coords: [24.5390, 81.3120] as [number, number] },
+  ];
 
   // Common pre-set issues with bilingual support and geo-evidence type
   const quickProblems = [
@@ -98,60 +112,24 @@ export default function Report() {
     },
   ];
 
-  // 1-Tap Quick Issue selection (Zero Effort on Phone & Desktop) with attached verified spot photo & video clip
-  const handleQuickSelect = async (prob: typeof quickProblems[0]) => {
+  // 1-Tap Quick Issue selection: Sets issue description and guides citizen to mandatory photo & location
+  const handleQuickSelect = (prob: (typeof quickProblems)[0]) => {
     const issueText = lang === 'hi' ? prob.hi : prob.en;
     setText(issueText);
-    const samplePhotoSvg = getCivicEvidenceSvg(prob.type);
-    const sampleVideoPoster = getCivicVideoPosterSvg(`${prob.tagHi} • रीवा नगर निगम`);
-    setMediaList([
-      {
-        id: `quick-p-${Date.now()}`,
-        type: 'image',
-        url: samplePhotoSvg,
-        name: `${prob.type}_spot_photo.jpg`,
-      },
-      {
-        id: `quick-v-${Date.now()}`,
-        type: 'video',
-        url: sampleVideoPoster,
-        name: `${prob.type}_video_clip.mp4`,
-        duration: 18,
-      },
-    ]);
-    setImageFile(new File(['evidence'], `${prob.type}.svg`, { type: 'image/svg+xml' }));
-    setStep('processing');
-    await new Promise((r) => setTimeout(r, 1100));
-    const result = analyzeProblemDemo(issueText);
-    setAnalysis(result);
-    setStep('preview');
-  };
-
-  // Helper to attach detected spot evidence based on text context
-  const attachDetectedEvidence = () => {
-    let type: 'garbage' | 'leakage' | 'streetlight' | 'pothole' | 'drainage' | 'dustbin' = 'garbage';
-    const lower = text.toLowerCase();
-    if (lower.includes('water') || lower.includes('pani') || lower.includes('paani') || lower.includes('leak') || lower.includes('pipe')) {
-      type = 'leakage';
-    } else if (lower.includes('light') || lower.includes('bijli') || lower.includes('andhera')) {
-      type = 'streetlight';
-    } else if (lower.includes('pothole') || lower.includes('gaddha') || lower.includes('sadak') || lower.includes('road')) {
-      type = 'pothole';
-    } else if (lower.includes('drain') || lower.includes('naali') || lower.includes('nali') || lower.includes('sewer')) {
-      type = 'drainage';
-    } else if (lower.includes('dustbin') || lower.includes('bin') || lower.includes('depot')) {
-      type = 'dustbin';
-    }
-    const sampleSvg = getCivicEvidenceSvg(type);
-    setMediaList((prev) => [
-      ...prev,
-      {
-        id: `det-p-${Date.now()}`,
-        type: 'image',
-        url: sampleSvg,
-        name: `${type}_photo_${prev.length + 1}.jpg`,
-      },
-    ]);
+    setSelectedQuickProblem(prob.tagEn);
+    setFormError(null);
+    setQuickNotice(
+      bilingual(
+        `✓ समस्या चुनी गई: "${prob.tagHi}"। रीवा नगर निगम एंटी-फ्रॉड नियम: अब कृपया नीचे (1) स्थल की अनिवार्य फोटो खींचें/अपलोड करें और (2) लोकेशन चुनें। (वीडियो वैकल्पिक है)`,
+        `✓ Issue selected: "${prob.tagEn}". Rewa Municipal Rule: Now please (1) capture/upload compulsory spot photo and (2) select location below. (Video is optional)`
+      )
+    );
+    // Switch to photo mode so photo capture/upload options are directly in front of citizen
+    setMode('photo');
+    // Scroll smoothly to photo evidence section
+    setTimeout(() => {
+      evidenceSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
   };
 
   // Voice recording
@@ -308,10 +286,17 @@ export default function Report() {
   };
 
   const removeMediaItem = (id: string) => {
-    setMediaList((prev) => prev.filter((m) => m.id !== id));
+    setMediaList((prev) => {
+      const remaining = prev.filter((m) => m.id !== id);
+      const hasImg = remaining.some((m) => m.type === 'image');
+      if (!hasImg) {
+        setImageFile(null);
+      }
+      return remaining;
+    });
   };
 
-  // Location
+  // Location Handlers
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
       alert(bilingual('जियोलोकेशन समर्थित नहीं है।', 'Geolocation not supported by browser.'));
@@ -319,22 +304,27 @@ export default function Report() {
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setLocation([pos.coords.latitude, pos.coords.longitude]);
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setLocation([lat, lng]);
         setAddress(
           bilingual(
-            `वार्ड 15, ढेकहा, रीवा (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)})`,
-            `Ward 15, Dhekha, Rewa (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)})`
+            `वार्ड 12, सिरमौर चौराहा, रीवा (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+            `Ward 12, Sirmour Chowk, Rewa (${lat.toFixed(4)}, ${lng.toFixed(4)})`
           )
         );
         setShowMap(false);
+        setFormError(null);
       },
       () => {
         setLocation([24.5373, 81.3005]);
         setAddress(
-          bilingual('वार्ड 12, सिरमौर चौराहा, रीवा (GPS)', 'Ward 12, Sirmour Chowk, Rewa (GPS)')
+          bilingual('वार्ड 12, सिरमौर चौराहा, रीवा (GPS पिन)', 'Ward 12, Sirmour Chowk, Rewa (GPS Pin)')
         );
         setShowMap(false);
-      }
+        setFormError(null);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
     );
   };
 
@@ -342,33 +332,62 @@ export default function Report() {
     setLocation([lat, lng]);
     setAddress(
       bilingual(
-        `वार्ड 18, रीवा (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
-        `Ward 18, Rewa (${lat.toFixed(4)}, ${lng.toFixed(4)})`
+        `रीवा नगर निगम क्षेत्र (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+        `Rewa Municipal Area (${lat.toFixed(4)}, ${lng.toFixed(4)})`
       )
     );
+    setFormError(null);
   };
 
-  // Submit for AI analysis (Requires mandatory photo or video proof)
+  const handleWardSelect = (wardName: string, coords: [number, number]) => {
+    setAddress(wardName + (wardName.includes('रीवा') ? '' : ', रीवा'));
+    setLocation(coords);
+    setFormError(null);
+  };
+
+  // Submit for AI analysis (STRICT ANTI-FRAUD: Photo & Location Mandatory, Video Optional)
   const handleAnalyze = async () => {
-    if (!text.trim() && !hasMedia) {
-      alert(
-        bilingual(
-          'कृपया अपनी समस्या का विवरण दें और फोटो अथवा वीडियो साक्ष्य संलग्न करें।',
-          'Please describe your problem and attach photo or video evidence.'
-        )
+    setFormError(null);
+
+    // 1. Text description check
+    if (!text.trim()) {
+      const msg = bilingual(
+        'कृपया अपनी समस्या का विवरण लिखें, बोलें या ऊपर दिए गए 1-टैप विकल्पों में से चुनें।',
+        'Please describe your problem by typing, speaking, or selecting a 1-tap issue above.'
       );
+      setFormError(msg);
+      alert(msg);
       return;
     }
 
-    // MANDATORY PHOTO/VIDEO PROOF TO PREVENT FAKE / SPAM COMPLAINTS
-    if (!hasMedia) {
-      alert(
-        bilingual(
-          '🛑 साक्ष्य अनिवार्य है!\n\nरीवा नगर निगम के निर्देशानुसार फर्जी एवं झूठी शिकायतों को रोकने के लिए घटनास्थल की वास्तविक फोटो या वीडियो संलग्न करना अनिवार्य है।\n\nकृपया कैमरे से फोटो/वीडियो लें या गैलरी से अपलोड करें।',
-          '🛑 Evidence is Mandatory!\n\nAs per Rewa Municipal Corporation anti-fraud rules, uploading genuine photographic or video proof of the incident spot is compulsory.\n\nPlease snap/record or upload photos/videos.'
-        )
+    // 2. MANDATORY PHOTO PROOF (Strict Anti-Fraud)
+    if (!hasPhoto) {
+      const msg = bilingual(
+        '🛑 फोटो साक्ष्य अनिवार्य है!\n\nरीवा नगर निगम के एंटी-फ्रॉड नियमों के तहत फर्जी व शरारती शिकायतों को रोकने के लिए घटनास्थल की वास्तविक फोटो संलग्न करना अनिवार्य है।\n\n(नोट: वीडियो साक्ष्य वैकल्पिक है, लेकिन फोटो अनिवार्य है)\n\nकृपया कैमरे से फोटो लें या गैलरी से फोटो अपलोड करें।',
+        '🛑 Photo Evidence is Compulsory!\n\nAs per Rewa Municipal Corporation anti-fraud regulations, uploading genuine photographic proof of the incident spot is strictly compulsory to eliminate fake complaints.\n\n(Note: Video proof is optional, but photo is mandatory)\n\nPlease capture a photo with your camera or upload from gallery.'
       );
+      setFormError(bilingual(
+        '🛑 फोटो साक्ष्य अनिवार्य है! कृपया नीचे कैमरे से फोटो खींचें या गैलरी से फोटो अपलोड करें। (वीडियो वैकल्पिक है)',
+        '🛑 Photo Evidence is Compulsory! Please snap a photo or upload from gallery below. (Video is optional)'
+      ));
       setMode('photo');
+      alert(msg);
+      evidenceSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    // 3. MANDATORY INCIDENT LOCATION (Strict Anti-Fraud)
+    if (!hasLocation) {
+      const msg = bilingual(
+        '📍 घटना स्थल लोकेशन अनिवार्य है!\n\nरीवा नगर निगम के नियमों के अनुसार बिना सही स्थान व वार्ड के शिकायत दर्ज नहीं की जा सकती।\n\nकृपया नीचे दिए गए इनपुट में वार्ड/स्थान लिखें या "मेरी GPS लोकेशन लें" / "मैप पर चुनें" बटन दबाएं।',
+        '📍 Incident Location is Compulsory!\n\nAs per Rewa Municipal regulations, a complaint cannot be registered without incident location and ward.\n\nPlease type your Ward/Address below or tap "Auto GPS Location" / "Select on Map".'
+      );
+      setFormError(bilingual(
+        '📍 घटना स्थल लोकेशन अनिवार्य है! कृपया नीचे वार्ड/पता लिखें या GPS/मैप से चुनें।',
+        '📍 Incident Location is Compulsory! Please enter address/ward or use GPS/Map below.'
+      ));
+      alert(msg);
+      locationInputRef.current?.focus();
       return;
     }
 
@@ -378,20 +397,8 @@ export default function Report() {
     const result = analyzeProblemDemo(text || 'Civic problem reported with verified evidence');
     setAnalysis(result);
 
-    if (hasMedia) {
-      const imgResult = analyzeImageDemo();
-      setImageAnalysis(imgResult);
-      if (!text.trim()) {
-        result.title = bilingual(
-          'सत्यापित साक्ष्य: जन-समस्या रिपोर्ट',
-          'Verified Civic Evidence: Problem Report'
-        );
-        result.description = imgResult.visual_summary;
-        result.category = 'Waste Management';
-        result.module = 'smart_waste';
-        result.severity = imgResult.severity;
-      }
-    }
+    const imgResult = analyzeImageDemo();
+    setImageAnalysis(imgResult);
 
     setStep('preview');
   };
@@ -400,13 +407,26 @@ export default function Report() {
   const handleSubmit = async () => {
     if (!analysis) return;
 
-    if (!hasMedia) {
+    if (!hasPhoto) {
       alert(
         bilingual(
-          '🛑 रोक दिया गया: फर्जी शिकायत रोकथाम नियम के तहत फोटो/वीडियो साक्ष्य के बिना शिकायत दर्ज नहीं की जा सकती।',
-          '🛑 Blocked: Complaint cannot be registered without photo or video evidence under anti-fraud regulations.'
+          '🛑 रोक दिया गया: फर्जी शिकायत रोकथाम नियम के तहत वास्तविक फोटो साक्ष्य के बिना शिकायत दर्ज नहीं की जा सकती। (वीडियो वैकल्पिक है)',
+          '🛑 Blocked: Complaint cannot be registered without genuine photo evidence under anti-fraud regulations. (Video is optional)'
         )
       );
+      setStep('input');
+      setMode('photo');
+      return;
+    }
+
+    if (!hasLocation || !location) {
+      alert(
+        bilingual(
+          '🛑 रोक दिया गया: घटना स्थल लोकेशन के बिना शिकायत दर्ज नहीं की जा सकती। कृपया लोकेशन दर्ज करें।',
+          '🛑 Blocked: Complaint cannot be registered without incident location. Please provide location.'
+        )
+      );
+      setStep('input');
       return;
     }
 
@@ -432,9 +452,9 @@ export default function Report() {
       status: 'SUBMITTED',
       citizen_id: 'citizen-rewa-1',
       citizen_name: bilingual('नागरिक (रीवा)', 'Citizen (Rewa)'),
-      latitude: location?.[0] || 24.5373,
-      longitude: location?.[1] || 81.3005,
-      address: address || bilingual('वार्ड 12, रीवा', 'Ward 12, Rewa'),
+      latitude: location[0],
+      longitude: location[1],
+      address: address.trim(),
       image_url: finalImageUrl,
       video_url: videoUrl,
       media: mediaList,
@@ -461,92 +481,113 @@ export default function Report() {
     setMediaList([]);
     setAnalysis(null);
     setImageAnalysis(null);
+    setSelectedQuickProblem(null);
+    setFormError(null);
+    setQuickNotice(null);
+    setLocation(null);
+    setAddress('');
     setStep('input');
     setMode('voice');
   };
 
   // Reusable Multi-Media Gallery Box (Used in Voice, Photo/Video, and Text modes)
   const renderMediaGallery = () => (
-    <div style={{
-      marginTop: '1.25rem',
-      padding: '1.1rem',
-      borderRadius: '10px',
-      border: hasMedia ? '2px solid #15803d' : '2px dashed #f43f5e',
-      background: hasMedia ? '#f0fdf4' : '#fff5f5',
-      textAlign: 'left'
-    }}>
+    <div
+      ref={evidenceSectionRef}
+      style={{
+        marginTop: '1.25rem',
+        padding: '1.15rem',
+        borderRadius: '12px',
+        border: hasPhoto ? '2px solid #15803d' : '2px dashed #f43f5e',
+        background: hasPhoto ? '#f0fdf4' : '#fff5f5',
+        textAlign: 'left',
+        transition: 'all 0.2s ease',
+      }}
+    >
       {/* Status Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.85rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-          {hasMedia ? (
-            <CheckCircle2 size={18} color="#15803d" />
+          {hasPhoto ? (
+            <CheckCircle2 size={20} color="#15803d" />
           ) : (
-            <ShieldAlert size={18} color="#e11d48" />
+            <ShieldAlert size={20} color="#e11d48" />
           )}
-          <span style={{ fontWeight: 800, fontSize: '0.92rem', color: hasMedia ? '#166534' : '#9f1239' }}>
-            {hasMedia
+          <span style={{ fontWeight: 800, fontSize: '0.94rem', color: hasPhoto ? '#166534' : '#9f1239' }}>
+            {hasPhoto
               ? bilingual(
-                  `✓ साक्ष्य संलग्न एवं प्रमाणित: ${photoCount} फोटो • ${videoCount} वीडियो (Anti-Spam Verified)`,
-                  `✓ Evidence Verified: ${photoCount} Photos • ${videoCount} Videos (Anti-Spam Passed)`
+                  `✓ फोटो साक्ष्य संलग्न: ${photoCount} फोटो ${videoCount > 0 ? `• ${videoCount} वीडियो` : ''} (सत्यापित)`,
+                  `✓ Photo Verified: ${photoCount} Photo(s) Attached ${videoCount > 0 ? `• ${videoCount} Video(s)` : ''}`
                 )
               : bilingual(
-                  '📷/🎥 फोटो या वीडियो साक्ष्य अनिवार्य है (Anti-Spam Proof Mandatory) *',
-                  '📷/🎥 Photo or Video Proof is Mandatory (Anti-Spam Proof) *'
+                  '📸 फोटो साक्ष्य अनिवार्य है (Photo Proof is Mandatory) *',
+                  '📸 Photo Proof is Mandatory (Anti-Fraud Directive) *'
                 )}
           </span>
         </div>
 
-        {hasMedia && (
-          <span style={{ fontSize: '0.72rem', background: '#dcfce7', color: '#15803d', fontWeight: 800, padding: '0.2rem 0.6rem', borderRadius: '20px', border: '1px solid #86efac' }}>
-            {bilingual(`कुल ${mediaList.length} साक्ष्य संलग्न`, `${mediaList.length} Items Attached`)}
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+          <span style={{
+            fontSize: '0.74rem',
+            background: hasPhoto ? '#dcfce7' : '#fee2e2',
+            color: hasPhoto ? '#15803d' : '#991b1b',
+            fontWeight: 800,
+            padding: '0.2rem 0.65rem',
+            borderRadius: '20px',
+            border: hasPhoto ? '1px solid #86efac' : '1px solid #fca5a5'
+          }}>
+            {hasPhoto
+              ? bilingual(`✓ ${photoCount} फोटो संलग्न (अनिवार्य पूर्ण)`, `✓ ${photoCount} Photo(s) Attached (Mandatory Met)`)
+              : bilingual('⚠️ फोटो अनिवार्य है *', '⚠️ Photo is Mandatory *')}
           </span>
-        )}
+          <span style={{
+            fontSize: '0.74rem',
+            background: videoCount > 0 ? '#eff6ff' : '#f1f5f9',
+            color: videoCount > 0 ? '#1d4ed8' : '#64748b',
+            fontWeight: 700,
+            padding: '0.2rem 0.65rem',
+            borderRadius: '20px',
+            border: videoCount > 0 ? '1px solid #bfdbfe' : '1px solid #cbd5e1'
+          }}>
+            {videoCount > 0
+              ? bilingual(`🎥 ${videoCount} वीडियो संलग्न`, `🎥 ${videoCount} Video(s) Attached`)
+              : bilingual('🎥 वीडियो वैकल्पिक (Optional)', '🎥 Video Optional')}
+          </span>
+        </div>
       </div>
 
       {/* Action Toolbar */}
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: mediaList.length > 0 ? '0.85rem' : '0' }}>
-        {/* Photo Capture / Upload */}
+        {/* Photo Capture via Camera */}
         <button
           type="button"
           className="btn btn-primary btn-sm"
-          style={{ background: '#0b3a6d', borderColor: '#0b3a6d', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+          style={{ background: '#0b3a6d', borderColor: '#0b3a6d', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 800 }}
           onClick={() => cameraPhotoInputRef.current?.click()}
         >
-          <Camera size={14} />
-          <span>{bilingual('+ फोटो जोड़ें / खींचें', '+ Add / Take Photo')}</span>
+          <Camera size={15} />
+          <span>{bilingual('📸 कैमरे से फोटो खींचें (अनिवार्य *)', '📸 Snap Photo with Camera (Mandatory *)')}</span>
         </button>
 
-        {/* Video Record / Upload */}
-        <button
-          type="button"
-          className="btn btn-primary btn-sm"
-          style={{ background: '#e11d48', borderColor: '#be123c', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-          onClick={() => cameraVideoInputRef.current?.click()}
-        >
-          <Video size={14} />
-          <span>{bilingual('+ वीडियो रिकॉर्ड / अपलोड करें', '+ Record / Upload Video')}</span>
-        </button>
-
-        {/* Multiple Files Picker */}
+        {/* Photo Pick from Gallery */}
         <button
           type="button"
           className="btn btn-secondary btn-sm"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 700 }}
           onClick={() => multiFileInputRef.current?.click()}
         >
-          <Film size={14} color="#0b3a6d" />
-          <span>{bilingual('गैलरी से कई फोटो/वीडियो', 'Pick Multiple Files')}</span>
+          <Plus size={14} color="#0b3a6d" />
+          <span>{bilingual('गैलरी से फोटो चुनें', 'Pick Photo from Gallery')}</span>
         </button>
 
-        {/* 1-Tap Sample Video */}
+        {/* Video Record / Upload (Explicitly marked OPTIONAL) */}
         <button
           type="button"
           className="btn btn-secondary btn-sm"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: '#eff6ff', borderColor: '#93c5fd' }}
-          onClick={handleAttachSampleVideo}
+          style={{ borderColor: '#f43f5e', color: '#be123c', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 700, background: '#fff' }}
+          onClick={() => cameraVideoInputRef.current?.click()}
         >
-          <Sparkles size={14} color="#2563eb" />
-          <span>{bilingual('⚡ डेमो वीडियो जोड़ें', '⚡ Attach Sample Video')}</span>
+          <Video size={14} color="#e11d48" />
+          <span>{bilingual('🎥 वीडियो जोड़ें (वैकल्पिक)', '🎥 Add Video (Optional)')}</span>
         </button>
       </div>
 
@@ -578,12 +619,12 @@ export default function Report() {
 
       {/* Media Preview Grid */}
       {mediaList.length > 0 && (
-        <div className="media-gallery-grid">
+        <div className="media-gallery-grid" style={{ marginTop: '0.85rem' }}>
           {mediaList.map((item) => (
             <div key={item.id} className="media-item-card">
               {/* Badge */}
               <span className={`media-badge-tag ${item.type === 'video' ? 'media-badge-video' : 'media-badge-photo'}`}>
-                {item.type === 'video' ? '🎥 VIDEO' : '📷 PHOTO'}
+                {item.type === 'video' ? '🎥 VIDEO (OPTIONAL)' : '📷 PHOTO (MANDATORY)'}
               </span>
 
               {/* Remove button */}
@@ -619,18 +660,18 @@ export default function Report() {
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '130px', fontWeight: 600 }}>
                   {item.name}
                 </span>
-                <span style={{ color: '#15803d', fontWeight: 700 }}>✓ Verified</span>
+                <span style={{ color: '#15803d', fontWeight: 700 }}>✓ Attached</span>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {!hasMedia && (
-        <p style={{ fontSize: '0.8rem', color: '#9f1239', marginTop: '0.65rem', marginBottom: 0 }}>
+      {!hasPhoto && (
+        <p style={{ fontSize: '0.82rem', color: '#9f1239', marginTop: '0.75rem', marginBottom: 0, fontWeight: 700 }}>
           {bilingual(
-            '⚠️ फर्जी व शरारती शिकायतों की रोकथाम: वास्तविक घटनास्थल का कम से कम 1 फोटो अथवा वीडियो अनिवार्य है। आप एक से अधिक फोटो या वीडियो भी जोड़ सकते हैं।',
-            '⚠️ Anti-Fraud Protection: At least 1 genuine spot photo or video is compulsory. You can upload multiple photos and videos for better assistance.'
+            '⚠️ रीवा नगर निगम एंटी-फ्रॉड नियम: घटनास्थल की वास्तविक फोटो अनिवार्य है। बिना फोटो के शिकायत सबमिट नहीं हो सकती। (वीडियो वैकल्पिक है)',
+            '⚠️ Rewa Municipal Regulation: Genuine photo of the incident spot is compulsory. Complaint cannot be submitted without a photo. (Video is optional)'
           )}
         </p>
       )}
@@ -672,38 +713,38 @@ export default function Report() {
               gap: '0.85rem',
               background: '#fff1f2',
               border: '2px solid #f43f5e',
-              borderRadius: '10px',
-              padding: '0.9rem 1.15rem',
+              borderRadius: '12px',
+              padding: '1rem 1.15rem',
               marginBottom: '1.25rem',
-              boxShadow: '0 4px 12px rgba(244,63,94,0.08)'
+              boxShadow: '0 4px 14px rgba(244,63,94,0.1)'
             }}>
-              <ShieldAlert size={32} color="#e11d48" style={{ flexShrink: 0 }} />
+              <ShieldAlert size={36} color="#e11d48" style={{ flexShrink: 0 }} />
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 900, color: '#9f1239', fontSize: '0.92rem' }}>
-                    {bilingual('🛡️ फर्जी शिकायत रोकथाम नियम (Anti-Fraud Directive)', '🛡️ Anti-Fraud Grievance Directive')}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.2rem' }}>
+                  <span style={{ fontWeight: 900, color: '#9f1239', fontSize: '0.94rem' }}>
+                    {bilingual('🛡️ फर्जी शिकायत रोकथाम नियम (Anti-Fraud Grievance Directive)', '🛡️ Anti-Fraud Grievance Directive')}
                   </span>
-                  <span style={{ background: '#e11d48', color: '#ffffff', fontSize: '0.68rem', fontWeight: 900, padding: '0.15rem 0.45rem', borderRadius: '4px', letterSpacing: '0.04em' }}>
-                    {bilingual('फोटो / वीडियो साक्ष्य अनिवार्य / MANDATORY MEDIA *', 'PHOTO / VIDEO PROOF MANDATORY *')}
+                  <span style={{ background: '#e11d48', color: '#ffffff', fontSize: '0.7rem', fontWeight: 900, padding: '0.2rem 0.55rem', borderRadius: '4px', letterSpacing: '0.04em' }}>
+                    {bilingual('📸 फोटो एवं 📍 लोकेशन अनिवार्य *', 'PHOTO & LOCATION MANDATORY *')}
                   </span>
                 </div>
-                <p style={{ margin: '0.25rem 0 0', fontSize: '0.83rem', color: '#881337', lineHeight: 1.5 }}>
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.84rem', color: '#881337', lineHeight: 1.55 }}>
                   {bilingual(
-                    'रीवा नगर निगम के आदेशानुसार झूठी, भ्रामक व शरारती शिकायतों को रोकने हेतु प्रत्येक शिकायत के साथ घटनास्थल की वास्तविक फोटो अथवा वीडियो संलग्न करना अनिवार्य है। नागरिक सहायता हेतु एक से अधिक फोटो या वीडियो भी जोड़ सकते हैं।',
-                    'As per Rewa Municipal Corporation regulations, genuine photo or video evidence of the incident spot is strictly compulsory to eliminate fake complaints. You can upload multiple photos or videos for better assistance.'
+                    'रीवा नगर निगम के आदेशानुसार झूठी व फर्जी शिकायतों को रोकने हेतु घटनास्थल की वास्तविक फोटो तथा लोकेशन दर्ज करना अनिवार्य है। (नोट: वीडियो साक्ष्य वैकल्पिक है)।',
+                    'As per Rewa Municipal Corporation regulations, genuine photo and location evidence of the incident spot is strictly compulsory to eliminate fake complaints. (Note: Video evidence is optional).'
                   )}
                 </p>
               </div>
             </div>
 
-            {/* Fast Quick-Select Chips (Zero Effort on Mobile!) */}
-            <div className="card" style={{ marginBottom: '1.25rem', background: '#f8fafc', border: '1px solid #cbd5e1' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0b3a6d' }}>
+            {/* Fast Quick-Select Chips (1-Tap Problem Selection) */}
+            <div className="card" style={{ marginBottom: '1.25rem', background: '#f8fafc', border: '1.5px solid #bfdbfe' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0b3a6d' }}>
                   ⚡ {bilingual('अक्सर होने वाली समस्याएं (1-टैप में चुनें):', 'Frequently Reported Issues (1-Tap):')}
                 </span>
-                <span style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 700 }}>
-                  ✓ {bilingual('फोटो एवं वीडियो प्रमाण सहित', 'With Verified Photo & Video')}
+                <span style={{ fontSize: '0.72rem', color: '#b91c1c', fontWeight: 800, background: '#fee2e2', padding: '2px 8px', borderRadius: 12 }}>
+                  {bilingual('📷 फोटो अनिवार्य • 📍 लोकेशन अनिवार्य • 🎥 वीडियो वैकल्पिक', '📷 Photo Mandatory • 📍 Location Mandatory • 🎥 Video Optional')}
                 </span>
               </div>
               <div className="mobile-quick-chips">
@@ -713,14 +754,41 @@ export default function Report() {
                     type="button"
                     className="mobile-quick-chip"
                     onClick={() => handleQuickSelect(p)}
+                    style={{
+                      border: selectedQuickProblem === p.tagEn ? '2px solid #0b3a6d' : undefined,
+                      background: selectedQuickProblem === p.tagEn ? '#eff6ff' : undefined,
+                      fontWeight: selectedQuickProblem === p.tagEn ? 800 : undefined,
+                    }}
                     title={lang === 'hi' ? p.hi : p.en}
                   >
                     <span>{p.icon}</span>
                     <span>{lang === 'hi' ? p.tagHi : p.tagEn}</span>
+                    {selectedQuickProblem === p.tagEn && <span style={{ color: '#15803d', fontSize: '0.75rem' }}>✓</span>}
                   </button>
                 ))}
               </div>
             </div>
+
+            {/* Quick Notice Guidance Banner */}
+            {quickNotice && (
+              <div style={{
+                background: '#eff6ff',
+                border: '1.5px solid #60a5fa',
+                borderRadius: '10px',
+                padding: '0.85rem 1rem',
+                marginBottom: '1.25rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.65rem',
+                color: '#1e40af',
+                fontSize: '0.86rem',
+                fontWeight: 700,
+                boxShadow: '0 2px 8px rgba(37,99,235,0.08)'
+              }}>
+                <CheckCircle2 size={20} color="#2563eb" style={{ flexShrink: 0 }} />
+                <span>{quickNotice}</span>
+              </div>
+            )}
 
             {/* Input Mode Selector */}
             <div className="input-methods">
@@ -826,31 +894,122 @@ export default function Report() {
               </div>
             )}
 
-            {/* Location Bar with 1-Tap Auto-GPS */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                <label className="form-label" style={{ margin: 0 }}>
-                  📍 {bilingual('घटना स्थल / वार्ड लोकेशन', 'Incident Location / Ward')}
+            {/* Location Section (MANDATORY) */}
+            <div style={{
+              marginBottom: '1.5rem',
+              background: '#fff',
+              border: !hasLocation ? '2px solid #f43f5e' : '1.5px solid #22c55e',
+              borderRadius: '12px',
+              padding: '1.15rem',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+              transition: 'all 0.2s ease',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <label className="form-label" style={{ margin: 0, fontWeight: 800, color: '#0b3a6d', fontSize: '0.94rem' }}>
+                  📍 {bilingual('घटना स्थल / वार्ड लोकेशन (अनिवार्य *)', 'Incident Location / Ward (Mandatory *)')}
                 </label>
-                <span style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: 700 }}>
-                  ✓ {bilingual('रीवा नगर निगम क्षेत्र', 'Rewa Municipal Limits')}
+                <span style={{
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  padding: '2px 9px',
+                  borderRadius: 12,
+                  background: hasLocation ? '#dcfce7' : '#fee2e2',
+                  color: hasLocation ? '#166534' : '#991b1b',
+                  border: hasLocation ? '1px solid #86efac' : '1px solid #fca5a5',
+                }}>
+                  {hasLocation
+                    ? bilingual('✓ लोकेशन दर्ज है', '✓ Location Verified')
+                    : bilingual('⚠️ लोकेशन अनिवार्य है *', '⚠️ Location is Mandatory *')}
                 </span>
               </div>
 
-              <div className="location-bar">
-                <button type="button" className="btn btn-secondary btn-sm" onClick={getCurrentLocation}>
-                  <Navigation size={14} color="#0b3a6d" />
-                  <span>{bilingual('मेरी GPS लोकेशन लें', 'Auto GPS Location')}</span>
+              {/* Editable Address Textbox */}
+              <div style={{ marginBottom: '0.65rem' }}>
+                <input
+                  ref={locationInputRef}
+                  type="text"
+                  value={address}
+                  onChange={(e) => {
+                    setAddress(e.target.value);
+                    if (!location && e.target.value.trim().length > 3) {
+                      setLocation([24.5373, 81.3005]);
+                    }
+                    setFormError(null);
+                  }}
+                  placeholder={bilingual(
+                    'वार्ड नंबर, मोहल्ला व लैंडमार्क लिखें (उदा. वार्ड 12, सिरमौर चौराहा, रीवा)...',
+                    'Enter Ward Number, Street, Landmark (e.g. Ward 12, Sirmour Chowk, Rewa)...'
+                  )}
+                  style={{
+                    width: '100%',
+                    padding: '0.8rem',
+                    borderRadius: '8px',
+                    border: !hasLocation ? '1.5px solid #fca5a5' : '1.5px solid #86efac',
+                    fontSize: '0.92rem',
+                    background: !hasLocation ? '#fff5f5' : '#f0fdf4',
+                    color: '#0f172a',
+                    outline: 'none',
+                  }}
+                />
+              </div>
+
+              {/* Location Action Buttons */}
+              <div className="location-bar" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.65rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={getCurrentLocation}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: '#eff6ff', borderColor: '#93c5fd', color: '#1e40af', fontWeight: 800 }}
+                >
+                  <Navigation size={14} color="#1d4ed8" />
+                  <span>{bilingual('मेरी GPS लोकेशन लें (Auto GPS)', 'Use My GPS Location')}</span>
                 </button>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowMap(!showMap)}>
-                  <MapPin size={14} color="#e65100" />
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowMap(!showMap)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 700 }}
+                >
+                  <MapPin size={14} color="#ea580c" />
                   <span>{showMap ? bilingual('मैप छुपाएं', 'Hide Map') : bilingual('मैप पर चुनें', 'Select on Map')}</span>
                 </button>
-                {address && <span className="location-text">📍 {address}</span>}
+                {address && (
+                  <span className="location-text" style={{ fontSize: '0.82rem', fontWeight: 700, color: '#15803d' }}>
+                    📍 {address}
+                  </span>
+                )}
+              </div>
+
+              {/* Rewa Municipal Wards Quick Selector Chips */}
+              <div style={{ marginTop: '0.5rem' }}>
+                <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: '0.35rem' }}>
+                  {bilingual('या 1-टैप में रीवा वार्ड चुनें (Quick Ward Pick):', 'Or 1-Tap Pick Rewa Ward:')}
+                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {rewaWards.map((w, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleWardSelect(w.name, w.coords)}
+                      style={{
+                        background: address.includes(w.name) ? '#eff6ff' : '#f1f5f9',
+                        border: address.includes(w.name) ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                        color: address.includes(w.name) ? '#1d4ed8' : '#334155',
+                        fontWeight: address.includes(w.name) ? 800 : 600,
+                        padding: '0.35rem 0.65rem',
+                        borderRadius: 6,
+                        fontSize: '0.76rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {w.name}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {showMap && (
-                <div style={{ marginTop: '0.75rem', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden' }}>
+                <div style={{ marginTop: '0.85rem', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden' }}>
                   <MapView
                     complaints={[]}
                     selectable
@@ -864,6 +1023,60 @@ export default function Report() {
               )}
             </div>
 
+            {/* Anti-Fraud Validation Error Alert */}
+            {formError && (
+              <div style={{
+                background: '#fff1f2',
+                border: '1.5px solid #f43f5e',
+                borderRadius: '10px',
+                padding: '0.85rem 1rem',
+                marginBottom: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.65rem',
+                color: '#9f1239',
+                fontSize: '0.88rem',
+                fontWeight: 700,
+                boxShadow: '0 2px 10px rgba(244,63,94,0.1)'
+              }}>
+                <ShieldAlert size={22} color="#e11d48" style={{ flexShrink: 0 }} />
+                <span>{formError}</span>
+              </div>
+            )}
+
+            {/* Anti-Fraud Requirements Checklist */}
+            <div style={{
+              background: '#f8fafc',
+              border: (!hasPhoto || !hasLocation || !text.trim()) ? '1.5px solid #fca5a5' : '1.5px solid #86efac',
+              borderRadius: '12px',
+              padding: '0.9rem 1rem',
+              marginBottom: '1.25rem',
+              textAlign: 'left'
+            }}>
+              <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#0b3a6d', marginBottom: '0.45rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <ShieldCheck size={16} color="#0b3a6d" />
+                <span>{bilingual('रीवा नगर निगम — अनिवार्य आवश्यकता चेकलिस्ट (Checklist):', 'Rewa Nagar Nigam — Mandatory Checklist:')}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.4rem', fontSize: '0.8rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: text.trim() ? '#15803d' : '#dc2626', fontWeight: 700 }}>
+                  <span>{text.trim() ? '✓' : '✕'}</span>
+                  <span>{bilingual('1. समस्या विवरण:', '1. Description:')} {text.trim() ? bilingual('दर्ज है', 'Provided') : bilingual('आवश्यक *', 'Required *')}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: hasPhoto ? '#15803d' : '#dc2626', fontWeight: 800 }}>
+                  <span>{hasPhoto ? '✓' : '✕'}</span>
+                  <span>{bilingual(`2. फोटो साक्ष्य (${photoCount} फोटो):`, `2. Photo Proof (${photoCount} attached):`)} {hasPhoto ? '✓' : bilingual('अनिवार्य *', 'Mandatory *')}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: hasLocation ? '#15803d' : '#dc2626', fontWeight: 800 }}>
+                  <span>{hasLocation ? '✓' : '✕'}</span>
+                  <span>{bilingual('3. स्थल लोकेशन:', '3. Location:')} {hasLocation ? '✓' : bilingual('अनिवार्य *', 'Mandatory *')}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#64748b', fontWeight: 600 }}>
+                  <span>ℹ️</span>
+                  <span>{bilingual(`4. वीडियो साक्ष्य (${videoCount} वीडियो):`, `4. Video Proof (${videoCount}):`)} {bilingual('वैकल्पिक', 'Optional')}</span>
+                </div>
+              </div>
+            </div>
+
             {/* Primary Submit Action */}
             <div style={{ textAlign: 'center' }}>
               <button
@@ -871,31 +1084,36 @@ export default function Report() {
                 className="btn btn-primary btn-lg"
                 style={{
                   width: '100%',
-                  maxWidth: '440px',
+                  maxWidth: '480px',
                   padding: '1rem',
                   fontSize: '1.05rem',
-                  background: (!text.trim() || !hasMedia) ? '#64748b' : '#0b3a6d',
-                  cursor: (!text.trim() || !hasMedia) ? 'not-allowed' : 'pointer',
-                  opacity: (!text.trim() || !hasMedia) ? 0.75 : 1
+                  background: (!text.trim() || !hasPhoto || !hasLocation) ? '#64748b' : '#0b3a6d',
+                  cursor: (!text.trim() || !hasPhoto || !hasLocation) ? 'not-allowed' : 'pointer',
+                  opacity: (!text.trim() || !hasPhoto || !hasLocation) ? 0.75 : 1,
+                  boxShadow: (text.trim() && hasPhoto && hasLocation) ? '0 4px 14px rgba(11,58,109,0.3)' : 'none',
                 }}
                 onClick={handleAnalyze}
               >
                 <Sparkles size={20} color="#fbbf24" />
                 <span>
-                  {!hasMedia
-                    ? bilingual('📷/🎥 फोटो/वीडियो साक्ष्य अनिवार्य है *', '📷/🎥 Photo or Video Proof Mandatory *')
-                    : bilingual('AI से शिकायत तैयार करें', 'Generate Complaint via AI')}
+                  {!text.trim()
+                    ? bilingual('📝 समस्या का विवरण लिखें या चुनें *', '📝 Enter Problem Details *')
+                    : !hasPhoto
+                    ? bilingual('📸 फोटो साक्ष्य जोड़ना अनिवार्य है *', '📸 Photo Proof is Mandatory *')
+                    : !hasLocation
+                    ? bilingual('📍 घटना स्थल लोकेशन दर्ज करें *', '📍 Incident Location is Mandatory *')
+                    : bilingual('✨ AI से शिकायत तैयार करें (Generate Complaint via AI)', '✨ Generate Complaint via AI')}
                 </span>
               </button>
-              <p style={{ fontSize: '0.78rem', color: !hasMedia ? '#b91c1c' : '#64748b', marginTop: '0.5rem', fontWeight: !hasMedia ? 700 : 400 }}>
-                {!hasMedia
+              <p style={{ fontSize: '0.8rem', color: (!hasPhoto || !hasLocation) ? '#b91c1c' : '#64748b', marginTop: '0.5rem', fontWeight: (!hasPhoto || !hasLocation) ? 700 : 400 }}>
+                {(!hasPhoto || !hasLocation)
                   ? bilingual(
-                      '⚠️ शिकायत तैयार करने के लिए फोटो अथवा वीडियो साक्ष्य अनिवार्य है (फर्जी शिकायतों से बचाव हेतु)।',
-                      '⚠️ Photo or video evidence is compulsory to generate complaint (to prevent fake complaints).'
+                      '⚠️ रीवा नगर निगम एंटी-फ्रॉड नियम: फोटो एवं लोकेशन दोनों अनिवार्य हैं। (वीडियो वैकल्पिक है)',
+                      '⚠️ Rewa Municipal Anti-Fraud Directive: Photo & Location are both strictly mandatory. (Video is optional)'
                     )
                   : bilingual(
-                      'AI अपने आप विभाग, प्राथमिकता और समस्या की श्रेणी तय करेगा।',
-                      'AI automatically identifies department, priority, and category.'
+                      '✓ सभी आवश्यकताएं पूर्ण हैं। AI अपने आप विभाग व प्राथमिकता तय करेगा।',
+                      '✓ All requirements met. AI will automatically assign department & severity.'
                     )}
               </p>
             </div>
@@ -1007,26 +1225,41 @@ export default function Report() {
                   {analysis.recommended_action}
                 </span>
               </div>
-              <div className="preview-row" style={{ background: hasMedia ? '#f0fdf4' : '#fff1f2', borderTop: '1px solid #cbd5e1' }}>
-                <span className="preview-label" style={{ color: hasMedia ? '#166534' : '#9f1239', fontWeight: 800 }}>
-                  {bilingual('साक्ष्य स्थिति (Anti-Fraud Status)', 'Evidence Status')}
+              <div className="preview-row" style={{ background: hasPhoto ? '#f0fdf4' : '#fff1f2', borderTop: '1px solid #cbd5e1' }}>
+                <span className="preview-label" style={{ color: hasPhoto ? '#166534' : '#9f1239', fontWeight: 800 }}>
+                  {bilingual('फोटो साक्ष्य (Photo Proof - अनिवार्य)', 'Photo Proof (Mandatory)')}
                 </span>
-                <span className="preview-value" style={{ color: hasMedia ? '#15803d' : '#e11d48', fontWeight: 800 }}>
-                  {hasMedia
-                    ? bilingual(
-                        `✓ ${photoCount} फोटो • ${videoCount} वीडियो सत्यापित (फर्जी जांच उत्तीर्ण)`,
-                        `✓ ${photoCount} Photos • ${videoCount} Videos Verified (Anti-Spam Passed)`
-                      )
-                    : bilingual('⚠️ साक्ष्य अनुपलब्ध (स्वीकार नहीं होगा)', '⚠️ Evidence Missing (Submission Blocked)')}
+                <span className="preview-value" style={{ color: hasPhoto ? '#15803d' : '#e11d48', fontWeight: 800 }}>
+                  {hasPhoto
+                    ? bilingual(`✓ ${photoCount} फोटो संलग्न (सत्यापित साक्ष्य)`, `✓ ${photoCount} Photo(s) Attached (Verified)`)
+                    : bilingual('⚠️ अनिवार्य फोटो अनुपलब्ध *', '⚠️ Mandatory Photo Missing *')}
+                </span>
+              </div>
+              <div className="preview-row" style={{ background: hasLocation ? '#f0fdf4' : '#fff1f2' }}>
+                <span className="preview-label" style={{ color: hasLocation ? '#166534' : '#9f1239', fontWeight: 800 }}>
+                  {bilingual('घटना स्थल लोकेशन (Location - अनिवार्य)', 'Incident Location (Mandatory)')}
+                </span>
+                <span className="preview-value" style={{ color: hasLocation ? '#15803d' : '#e11d48', fontWeight: 800 }}>
+                  {hasLocation ? `${address} ✓` : bilingual('⚠️ लोकेशन दर्ज नहीं है *', '⚠️ Location Missing *')}
+                </span>
+              </div>
+              <div className="preview-row" style={{ background: '#f8fafc' }}>
+                <span className="preview-label" style={{ color: '#64748b' }}>
+                  {bilingual('वीडियो साक्ष्य (Video Proof - वैकल्पिक)', 'Video Proof (Optional)')}
+                </span>
+                <span className="preview-value" style={{ color: videoCount > 0 ? '#15803d' : '#64748b', fontWeight: 600 }}>
+                  {videoCount > 0
+                    ? bilingual(`✓ ${videoCount} वीडियो संलग्न`, `✓ ${videoCount} Video(s) Attached`)
+                    : bilingual('संलग्न नहीं (वैकल्पिक)', 'None (Optional)')}
                 </span>
               </div>
             </div>
 
-            {hasMedia ? (
+            {hasPhoto && hasLocation ? (
               <div className="card" style={{ marginBottom: '1.5rem', textAlign: 'center', border: '2px solid #86efac', background: '#f8fafc' }}>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: '#dcfce7', color: '#166534', padding: '0.25rem 0.75rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 800, marginBottom: '0.75rem' }}>
                   <ShieldCheck size={15} />
-                  <span>{bilingual(`रीवा नगर निगम डिजिटल साक्ष्य प्रमाणित (${mediaList.length} फाइलें संलग्न)`, `Rewa Municipal Evidence Verified (${mediaList.length} Files Attached)`)}</span>
+                  <span>{bilingual(`रीवा नगर निगम डिजिटल साक्ष्य प्रमाणित (${photoCount} फोटो ${videoCount > 0 ? `• ${videoCount} वीडियो` : ''} संलग्न)`, `Rewa Municipal Evidence Verified (${photoCount} Photo(s) Attached)`)}</span>
                 </div>
 
                 {/* Multi-Media Gallery Grid in Step 3 Preview */}
@@ -1034,7 +1267,7 @@ export default function Report() {
                   {mediaList.map((item) => (
                     <div key={item.id} className="media-item-card">
                       <span className={`media-badge-tag ${item.type === 'video' ? 'media-badge-video' : 'media-badge-photo'}`}>
-                        {item.type === 'video' ? '🎥 VIDEO' : '📷 PHOTO'}
+                        {item.type === 'video' ? '🎥 VIDEO (OPTIONAL)' : '📷 PHOTO (MANDATORY)'}
                       </span>
                       <div className="media-thumb-container">
                         {item.type === 'video' ? (
@@ -1056,7 +1289,7 @@ export default function Report() {
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px', fontWeight: 600 }}>
                           {item.name}
                         </span>
-                        <span style={{ color: '#15803d', fontWeight: 700 }}>✓ Verified</span>
+                        <span style={{ color: '#15803d', fontWeight: 700 }}>✓ Attached</span>
                       </div>
                     </div>
                   ))}
@@ -1067,20 +1300,20 @@ export default function Report() {
                     <strong>AI Vision:</strong> {imageAnalysis.visual_summary}
                   </p>
                 )}
-                <div style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 700, marginTop: '0.35rem' }}>
-                  ✓ {bilingual('भू-निर्देशांक (GPS: 24.5373° N, 81.3005° E) एवं टाइमस्टैम्प साक्ष्य के साथ सुरक्षित', 'Geo-Coordinates (GPS: 24.5373° N, 81.3005° E) & Timestamp Logged')}
+                <div style={{ fontSize: '0.74rem', color: '#15803d', fontWeight: 700, marginTop: '0.35rem' }}>
+                  ✓ {bilingual(`भू-निर्देशांक (${location ? `${location[0].toFixed(4)}° N, ${location[1].toFixed(4)}° E` : ''}) एवं टाइमस्टैम्प साक्ष्य सुरक्षित`, `Geo-Coordinates & Timestamp Logged`)}
                 </div>
               </div>
             ) : (
               <div className="card" style={{ marginBottom: '1.5rem', textAlign: 'center', border: '2px solid #f43f5e', background: '#fff1f2' }}>
                 <ShieldAlert size={36} color="#e11d48" style={{ margin: '0 auto 0.5rem' }} />
                 <h4 style={{ color: '#9f1239', fontWeight: 800, marginBottom: '0.35rem' }}>
-                  {bilingual('फोटो या वीडियो साक्ष्य संलग्न नहीं है!', 'Mandatory Photo or Video Evidence Missing!')}
+                  {!hasPhoto ? bilingual('फोटो साक्ष्य संलग्न नहीं है!', 'Mandatory Photo Evidence Missing!') : bilingual('घटना स्थल लोकेशन दर्ज नहीं है!', 'Mandatory Location Missing!')}
                 </h4>
                 <p style={{ color: '#881337', fontSize: '0.85rem', marginBottom: '0.85rem' }}>
                   {bilingual(
-                    'फर्जी शिकायतों से बचाव हेतु वास्तविक स्थल का फोटो अथवा वीडियो अपलोड करना अनिवार्य है। कृपया साक्ष्य जोड़ें।',
-                    'As per anti-spam regulations, genuine spot photo or video proof is mandatory before final submission.'
+                    'रीवा नगर निगम एंटी-फ्रॉड नियमों के तहत वास्तविक फोटो तथा लोकेशन दोनों अनिवार्य हैं। कृपया वापस जाकर विवरण पूर्ण करें।',
+                    'As per Rewa Municipal anti-fraud rules, genuine spot photo and location are both mandatory.'
                   )}
                 </p>
                 <button
@@ -1089,11 +1322,11 @@ export default function Report() {
                   style={{ background: '#e11d48', borderColor: '#be123c' }}
                   onClick={() => {
                     setStep('input');
-                    setMode('photo');
+                    if (!hasPhoto) setMode('photo');
                   }}
                 >
-                  <Camera size={15} />
-                  <span>{bilingual('साक्ष्य संलग्न करने के लिए वापस जाएं', 'Go Back to Attach Evidence')}</span>
+                  <ArrowLeft size={15} />
+                  <span>{bilingual('वापस जाकर साक्ष्य/लोकेशन पूर्ण करें', 'Go Back to Complete Requirements')}</span>
                 </button>
               </div>
             )}
@@ -1103,19 +1336,22 @@ export default function Report() {
                 type="button"
                 className="btn btn-primary btn-lg"
                 style={{
-                  background: !hasMedia ? '#64748b' : '#15803d',
-                  borderColor: !hasMedia ? '#475569' : '#0d5f06',
-                  minWidth: '220px',
-                  cursor: !hasMedia ? 'not-allowed' : 'pointer',
-                  opacity: !hasMedia ? 0.7 : 1
+                  background: (!hasPhoto || !hasLocation) ? '#64748b' : '#15803d',
+                  borderColor: (!hasPhoto || !hasLocation) ? '#475569' : '#0d5f06',
+                  minWidth: '240px',
+                  cursor: (!hasPhoto || !hasLocation) ? 'not-allowed' : 'pointer',
+                  opacity: (!hasPhoto || !hasLocation) ? 0.7 : 1,
+                  boxShadow: (hasPhoto && hasLocation) ? '0 4px 14px rgba(21,128,61,0.3)' : 'none',
                 }}
-                disabled={!hasMedia}
+                disabled={!hasPhoto || !hasLocation}
                 onClick={handleSubmit}
               >
                 <Send size={18} />
                 <span>
-                  {!hasMedia
-                    ? bilingual('साक्ष्य अनिवार्य है *', 'Evidence Mandatory *')
+                  {!hasPhoto
+                    ? bilingual('फोटो साक्ष्य अनिवार्य है *', 'Photo Evidence Mandatory *')
+                    : !hasLocation
+                    ? bilingual('लोकेशन दर्ज करना अनिवार्य है *', 'Location Mandatory *')
                     : bilingual('पुष्टि करें एवं शिकायत दर्ज करें', 'Confirm & Submit to Nigam')}
                 </span>
               </button>
