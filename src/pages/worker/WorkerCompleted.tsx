@@ -1,15 +1,19 @@
 import { useState, useEffect } from "react";
-import { CheckCircle2, Calendar, ImageOff } from "lucide-react";
+import { Link } from "react-router-dom";
+import { CheckCircle2, Calendar, ImageOff, Download, ExternalLink, Eye } from "lucide-react";
 import {
   getMyCompletedWork, getImageUrl, type WorkerAssignment
 } from "../../services/workerService";
+import { downloadPhotoFile, getCompletionPhotoFilename } from "../../services/downloadService";
 
 function CompletionCard({ assignment }: { assignment: WorkerAssignment }) {
+  const [downloading, setDownloading] = useState(false);
+
   const beforeUrl = assignment.before_image_path
-    ? getImageUrl(assignment.before_image_path, "report-images")
+    ? (assignment.before_image_path.startsWith("http") ? assignment.before_image_path : getImageUrl(assignment.before_image_path, "report-images"))
     : null;
   const afterUrl = assignment.completion_image_path
-    ? getImageUrl(assignment.completion_image_path, "completion-images")
+    ? (assignment.completion_image_path.startsWith("http") ? assignment.completion_image_path : getImageUrl(assignment.completion_image_path, "completion-images"))
     : null;
 
   const formatDate = (d: string) =>
@@ -17,6 +21,14 @@ function CompletionCard({ assignment }: { assignment: WorkerAssignment }) {
       day: "numeric", month: "short", year: "numeric",
       hour: "2-digit", minute: "2-digit",
     });
+
+  const handleDownload = async () => {
+    if (!afterUrl) return;
+    setDownloading(true);
+    const filename = getCompletionPhotoFilename(assignment.reference_number, afterUrl);
+    await downloadPhotoFile(afterUrl, filename);
+    setDownloading(false);
+  };
 
   return (
     <div style={{
@@ -87,7 +99,7 @@ function CompletionCard({ assignment }: { assignment: WorkerAssignment }) {
           {/* After */}
           <div>
             <div style={{ fontSize: "0.65rem", fontWeight: 800, color: "#15803d", marginBottom: "0.3rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-              📸 After (Your Work)
+              📸 After (Department Proof)
             </div>
             {afterUrl ? (
               <img
@@ -117,7 +129,7 @@ function CompletionCard({ assignment }: { assignment: WorkerAssignment }) {
             lineHeight: 1.5,
           }}>
             <div style={{ fontSize: "0.65rem", fontWeight: 800, color: "#15803d", marginBottom: "0.2rem" }}>
-              YOUR COMPLETION NOTE:
+              OFFICIAL COMPLETION NOTE:
             </div>
             {assignment.completion_note}
           </div>
@@ -125,15 +137,91 @@ function CompletionCard({ assignment }: { assignment: WorkerAssignment }) {
 
         {/* Completion timestamp */}
         {assignment.resolved_at && (
-          <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.72rem", color: "#94a3b8" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.72rem", color: "#64748b", marginBottom: "0.75rem" }}>
             <Calendar size={12} />
             Completed: {formatDate(assignment.resolved_at)}
           </div>
         )}
+
+        {/* Action Buttons: Download & View */}
+        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+          {afterUrl && (
+            <button
+              type="button"
+              id={`download-proof-${assignment.reference_number}`}
+              onClick={handleDownload}
+              disabled={downloading}
+              style={{
+                flex: 1,
+                minWidth: 140,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.35rem",
+                background: "#15803d",
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                padding: "0.55rem 0.75rem",
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                cursor: downloading ? "not-allowed" : "pointer",
+              }}
+            >
+              <Download size={14} />
+              {downloading ? "Downloading..." : "Download Photo"}
+            </button>
+          )}
+
+          <Link
+            to={`/worker/tasks/${assignment.id}`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "0.3rem",
+              background: "#eff6ff",
+              color: "#1d4ed8",
+              border: "1px solid #bfdbfe",
+              borderRadius: 8,
+              padding: "0.55rem 0.75rem",
+              fontSize: "0.78rem",
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
+          >
+            <Eye size={14} />
+            Details
+          </Link>
+
+          <Link
+            to={`/complaints/${assignment.id}`}
+            target="_blank"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "0.3rem",
+              background: "#f8fafc",
+              color: "#475569",
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+              padding: "0.55rem 0.75rem",
+              fontSize: "0.78rem",
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
+            title="Open Public Tracking Page"
+          >
+            <ExternalLink size={14} />
+            Public Page
+          </Link>
+        </div>
       </div>
     </div>
   );
 }
+
 
 export default function WorkerCompleted() {
   const [assignments, setAssignments] = useState<WorkerAssignment[]>([]);

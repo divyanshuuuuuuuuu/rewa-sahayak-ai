@@ -8,12 +8,19 @@ import { useAuth } from "../context/AuthContext";
 import { getMyNotifications } from "../services/workerService";
 import { AshokaEmblem } from "./Emblem";
 
+import { DEPARTMENT_METADATA } from "../services/departmentAccountService";
+
 export default function WorkerLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const deptKey = (user?.user_metadata?.department_key as string) || "water";
+  const deptMeta = DEPARTMENT_METADATA[deptKey] || { icon: "🏛️", badgeColor: "#0b3a6d", bgLight: "#eff6ff", labelHi: "" };
+  const departmentName = user?.user_metadata?.department || user?.user_metadata?.department_name || profile?.full_name || "Department Portal";
+  const isDept = user?.user_metadata?.is_department_account ?? true;
 
   useEffect(() => {
     getMyNotifications().then(({ notifications }) => {
@@ -40,10 +47,10 @@ export default function WorkerLayout() {
   };
 
   const navItems = [
-    { path: "/worker", label: "Home", icon: LayoutDashboard },
-    { path: "/worker/tasks", label: "My Tasks", icon: ClipboardList },
+    { path: "/worker", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/worker/tasks", label: "Assignments", icon: ClipboardList },
     { path: "/worker/in-progress", label: "In Progress", icon: PlayCircle },
-    { path: "/worker/completed", label: "Completed", icon: CheckCircle2 },
+    { path: "/worker/completed", label: "Resolved", icon: CheckCircle2 },
     { path: "/worker/notifications", label: "Alerts", icon: Bell, badge: unreadCount },
   ];
 
@@ -61,19 +68,32 @@ export default function WorkerLayout() {
         zIndex: 100,
         boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", minWidth: 0 }}>
           <AshokaEmblem size={32} />
-          <div>
-            <div style={{ color: "#fff", fontWeight: 800, fontSize: "0.95rem", lineHeight: 1.2 }}>
-              Worker Portal
+          <div style={{ minWidth: 0 }}>
+            <div style={{
+              color: "#fff",
+              fontWeight: 800,
+              fontSize: "0.92rem",
+              lineHeight: 1.2,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.3rem",
+            }}>
+              <span>{deptMeta.icon}</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{departmentName}</span>
             </div>
-            <div style={{ color: "#93c5fd", fontSize: "0.65rem", fontWeight: 500 }}>
-              Rewa Sahayak AI
+            <div style={{ color: "#93c5fd", fontSize: "0.65rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.35rem" }}>
+              <span>Rewa Municipal Corporation</span>
+              <span style={{ background: "rgba(34,197,94,0.2)", color: "#86efac", padding: "1px 6px", borderRadius: 10, fontSize: "0.6rem" }}>● Active</span>
             </div>
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexShrink: 0 }}>
           {/* Notification bell */}
           <Link to="/worker/notifications" style={{ position: "relative", color: "#fff", display: "flex" }}>
             <Bell size={22} />
@@ -175,34 +195,151 @@ export default function WorkerLayout() {
 
             {/* Drawer Nav */}
             <div style={{ flex: 1, overflowY: "auto", padding: "0.75rem 0" }}>
-              {navItems.map(item => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setDrawerOpen(false)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.75rem",
-                    padding: "0.85rem 1.25rem",
-                    textDecoration: "none",
-                    color: isActive(item.path) ? "#0b3a6d" : "#334155",
-                    background: isActive(item.path) ? "#eff6ff" : "transparent",
-                    borderLeft: isActive(item.path) ? "3px solid #0b3a6d" : "3px solid transparent",
-                    fontWeight: isActive(item.path) ? 700 : 500,
-                    fontSize: "0.9rem",
-                    transition: "all 0.15s",
-                  }}
-                >
-                  <item.icon size={18} />
-                  <span style={{ flex: 1 }}>{item.label}</span>
-                  {item.badge && item.badge > 0 ? (
-                    <span style={{ background: "#ef4444", color: "#fff", fontSize: "0.65rem", fontWeight: 800, borderRadius: 20, padding: "1px 6px" }}>
-                      {item.badge}
-                    </span>
-                  ) : <ChevronRight size={14} color="#cbd5e1" />}
-                </Link>
-              ))}
+              <Link
+                to="/worker"
+                onClick={() => setDrawerOpen(false)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  padding: "0.75rem 1.25rem",
+                  textDecoration: "none",
+                  color: location.pathname === "/worker" ? "#0b3a6d" : "#334155",
+                  background: location.pathname === "/worker" ? "#eff6ff" : "transparent",
+                  borderLeft: location.pathname === "/worker" ? "3px solid #0b3a6d" : "3px solid transparent",
+                  fontWeight: location.pathname === "/worker" ? 700 : 500,
+                  fontSize: "0.88rem",
+                }}
+              >
+                <LayoutDashboard size={18} />
+                <span style={{ flex: 1 }}>Dashboard Overview</span>
+                <ChevronRight size={14} color="#cbd5e1" />
+              </Link>
+
+              <Link
+                to="/worker/tasks"
+                onClick={() => setDrawerOpen(false)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  padding: "0.75rem 1.25rem",
+                  textDecoration: "none",
+                  color: location.pathname === "/worker/tasks" ? "#0b3a6d" : "#334155",
+                  background: location.pathname === "/worker/tasks" ? "#eff6ff" : "transparent",
+                  borderLeft: location.pathname === "/worker/tasks" ? "3px solid #0b3a6d" : "3px solid transparent",
+                  fontWeight: location.pathname === "/worker/tasks" ? 700 : 500,
+                  fontSize: "0.88rem",
+                }}
+              >
+                <ClipboardList size={18} />
+                <span style={{ flex: 1 }}>All Department Complaints</span>
+                <ChevronRight size={14} color="#cbd5e1" />
+              </Link>
+
+              <Link
+                to="/worker/tasks?filter=ASSIGNED"
+                onClick={() => setDrawerOpen(false)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  padding: "0.75rem 1.25rem",
+                  textDecoration: "none",
+                  color: "#d97706",
+                  fontWeight: 600,
+                  fontSize: "0.88rem",
+                }}
+              >
+                <span style={{ fontSize: "1rem" }}>📋</span>
+                <span style={{ flex: 1 }}>New Assignments / Tasks</span>
+                <ChevronRight size={14} color="#cbd5e1" />
+              </Link>
+
+              <Link
+                to="/worker/in-progress"
+                onClick={() => setDrawerOpen(false)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  padding: "0.75rem 1.25rem",
+                  textDecoration: "none",
+                  color: location.pathname === "/worker/in-progress" ? "#7c3aed" : "#334155",
+                  background: location.pathname === "/worker/in-progress" ? "#f5f3ff" : "transparent",
+                  borderLeft: location.pathname === "/worker/in-progress" ? "3px solid #7c3aed" : "3px solid transparent",
+                  fontWeight: location.pathname === "/worker/in-progress" ? 700 : 500,
+                  fontSize: "0.88rem",
+                }}
+              >
+                <PlayCircle size={18} color="#7c3aed" />
+                <span style={{ flex: 1 }}>Work In Progress</span>
+                <ChevronRight size={14} color="#cbd5e1" />
+              </Link>
+
+              <Link
+                to="/worker/completed"
+                onClick={() => setDrawerOpen(false)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  padding: "0.75rem 1.25rem",
+                  textDecoration: "none",
+                  color: location.pathname === "/worker/completed" ? "#15803d" : "#334155",
+                  background: location.pathname === "/worker/completed" ? "#f0fdf4" : "transparent",
+                  borderLeft: location.pathname === "/worker/completed" ? "3px solid #15803d" : "3px solid transparent",
+                  fontWeight: location.pathname === "/worker/completed" ? 700 : 500,
+                  fontSize: "0.88rem",
+                }}
+              >
+                <CheckCircle2 size={18} color="#15803d" />
+                <span style={{ flex: 1 }}>Resolved Complaints</span>
+                <ChevronRight size={14} color="#cbd5e1" />
+              </Link>
+
+              <Link
+                to="/worker/completed"
+                onClick={() => setDrawerOpen(false)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  padding: "0.75rem 1.25rem",
+                  textDecoration: "none",
+                  color: "#0b3a6d",
+                  fontWeight: 600,
+                  fontSize: "0.88rem",
+                }}
+              >
+                <span style={{ fontSize: "1rem" }}>📸</span>
+                <span style={{ flex: 1 }}>Completion Evidence</span>
+                <ChevronRight size={14} color="#cbd5e1" />
+              </Link>
+
+              <Link
+                to="/worker/notifications"
+                onClick={() => setDrawerOpen(false)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  padding: "0.75rem 1.25rem",
+                  textDecoration: "none",
+                  color: location.pathname === "/worker/notifications" ? "#0b3a6d" : "#334155",
+                  background: location.pathname === "/worker/notifications" ? "#eff6ff" : "transparent",
+                  fontWeight: location.pathname === "/worker/notifications" ? 700 : 500,
+                  fontSize: "0.88rem",
+                }}
+              >
+                <Bell size={18} />
+                <span style={{ flex: 1 }}>Notifications</span>
+                {unreadCount > 0 ? (
+                  <span style={{ background: "#ef4444", color: "#fff", fontSize: "0.65rem", fontWeight: 800, borderRadius: 20, padding: "1px 6px" }}>
+                    {unreadCount}
+                  </span>
+                ) : <ChevronRight size={14} color="#cbd5e1" />}
+              </Link>
 
               <div style={{ height: 1, background: "#e2e8f0", margin: "0.5rem 1.25rem" }} />
 
@@ -213,16 +350,16 @@ export default function WorkerLayout() {
                   display: "flex",
                   alignItems: "center",
                   gap: "0.75rem",
-                  padding: "0.85rem 1.25rem",
+                  padding: "0.75rem 1.25rem",
                   textDecoration: "none",
-                  color: isActive("/worker/profile") ? "#0b3a6d" : "#334155",
-                  background: isActive("/worker/profile") ? "#eff6ff" : "transparent",
-                  fontWeight: isActive("/worker/profile") ? 700 : 500,
-                  fontSize: "0.9rem",
+                  color: location.pathname === "/worker/profile" ? "#0b3a6d" : "#334155",
+                  background: location.pathname === "/worker/profile" ? "#eff6ff" : "transparent",
+                  fontWeight: location.pathname === "/worker/profile" ? 700 : 500,
+                  fontSize: "0.88rem",
                 }}
               >
                 <User size={18} />
-                <span>My Profile</span>
+                <span>Department Profile</span>
                 <ChevronRight size={14} color="#cbd5e1" style={{ marginLeft: "auto" }} />
               </Link>
             </div>

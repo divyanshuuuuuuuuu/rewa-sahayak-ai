@@ -48,6 +48,7 @@ export default function App() {
               <Route path="/worker" element={<WorkerHome />} />
               <Route path="/worker/tasks" element={<WorkerTasks />} />
               <Route path="/worker/tasks/:id" element={<WorkerTaskDetail />} />
+              <Route path="/worker/task/:id" element={<WorkerTaskDetail />} />
               <Route path="/worker/in-progress" element={<WorkerInProgress />} />
               <Route path="/worker/completed" element={<WorkerCompleted />} />
               <Route path="/worker/notifications" element={<WorkerNotifications />} />

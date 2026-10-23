@@ -1,16 +1,37 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, MapPin, Clock, User, Building, Sparkles, Printer, ShieldCheck, CheckCircle2, Video, Film, Camera } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, User, Building, Sparkles, Printer, ShieldCheck, CheckCircle2, Video, Film, Camera, Download } from 'lucide-react';
 import { getComplaintById, syncFromSupabase } from '../services/store';
 import { statusColors, severityColors, moduleColors, categoryIcons } from '../services/ai';
 import MapView from '../components/MapView';
 import { useGov } from '../context/GovContext';
+import { downloadPhotoFile, getCompletionPhotoFilename } from '../services/downloadService';
 
 export default function ComplaintDetail() {
   const { id } = useParams();
   const { lang, bilingual, statusLabel, moduleLabel, categoryLabel } = useGov();
   const [complaint, setComplaint] = useState(id ? getComplaintById(id) : undefined);
   const [loading, setLoading] = useState(!complaint);
+  const [downloadingPhoto, setDownloadingPhoto] = useState(false);
+  const [downloadFeedback, setDownloadFeedback] = useState<string | null>(null);
+
+  const handleDownloadCompletionPhoto = async () => {
+    if (!complaint?.video_url) return;
+    setDownloadingPhoto(true);
+    setDownloadFeedback(null);
+    try {
+      const filename = getCompletionPhotoFilename(complaint.ticket_number, complaint.video_url);
+      const res = await downloadPhotoFile(complaint.video_url, filename);
+      if (res.success) {
+        setDownloadFeedback(bilingual(`फोटो सुरक्षित रूप से डाउनलोड हुई: ${filename}`, `Photo downloaded: ${filename}`));
+        setTimeout(() => setDownloadFeedback(null), 4000);
+      } else {
+        alert(res.error || 'Failed to download completion photo');
+      }
+    } finally {
+      setDownloadingPhoto(false);
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -160,6 +181,32 @@ export default function ComplaintDetail() {
         <div className="detail-grid">
           {/* Main Content Column */}
           <div>
+            {/* Work Delay Alert Notice (if reported) */}
+            {complaint.delay_reason && (
+              <div
+                className="card"
+                style={{
+                  marginBottom: '1.25rem',
+                  border: '1.5px solid #f59e0b',
+                  background: '#fffbeb',
+                  boxShadow: '0 4px 14px rgba(245,158,11,0.1)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                  <Clock size={18} color="#d97706" />
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#b45309', margin: 0 }}>
+                    {bilingual('⚠️ कार्य में विलंब की आधिकारिक सूचना (Official Work Delay Notice)', '⚠️ Official Field Delay Notice')}
+                  </h3>
+                </div>
+                <p style={{ color: '#92400e', fontSize: '0.9rem', lineHeight: 1.6, margin: 0, fontWeight: 600 }}>
+                  "{complaint.delay_reason}"
+                </p>
+                <p style={{ fontSize: '0.75rem', color: '#b45309', margin: '0.4rem 0 0' }}>
+                  {bilingual('फील्ड टीम द्वारा कार्यस्थल पर आवश्यक व्यवस्थाएं की जा रही हैं।', 'Field operations team is actively mobilizing required resources on site.')}
+                </p>
+              </div>
+            )}
+
             {/* Description */}
             <div className="card" style={{ marginBottom: '1.25rem' }}>
               <h3 className="detail-section-title">
@@ -312,23 +359,70 @@ export default function ComplaintDetail() {
                   </span>
                 </div>
 
-                {/* Completion Photograph Uploaded by Worker */}
+                {/* Responsible Department */}
+                {complaint.assigned_department && (
+                  <div style={{ marginBottom: '0.65rem', padding: '0.35rem 0.6rem', background: '#dcfce7', borderRadius: 6, fontSize: '0.78rem', color: '#14532d', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Building size={14} color="#15803d" />
+                    <span>{bilingual('उत्तरदायी विभाग:', 'Department:')} {complaint.assigned_department}</span>
+                  </div>
+                )}
+
+                {/* Completion Photograph Uploaded by Department Worker */}
                 {complaint.video_url && (
-                  <div style={{ marginBottom: '0.65rem' }}>
-                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#166534', display: 'block', marginBottom: '0.25rem' }}>
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#166534', display: 'block', marginBottom: '0.3rem' }}>
                       📸 {bilingual('कार्य समाप्ति की वास्तविक फोटो (Completion Photograph):', 'Completion Proof Photograph:')}
                     </span>
-                    <img
-                      src={complaint.video_url}
-                      alt="Department Resolution Proof"
+                    <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '2px solid #22c55e', background: '#000' }}>
+                      <img
+                        src={complaint.video_url}
+                        alt="Department Resolution Proof"
+                        style={{
+                          width: '100%',
+                          maxHeight: 220,
+                          objectFit: 'cover',
+                          display: 'block',
+                        }}
+                      />
+                    </div>
+
+                    {/* Compulsory Download Completion Photo Button */}
+                    <button
+                      id="download-completion-photo-btn"
+                      type="button"
+                      onClick={handleDownloadCompletionPhoto}
+                      disabled={downloadingPhoto}
                       style={{
+                        marginTop: '0.5rem',
                         width: '100%',
-                        borderRadius: 8,
-                        maxHeight: 200,
-                        objectFit: 'cover',
-                        border: '2px solid #22c55e',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.45rem',
+                        background: '#15803d',
+                        color: '#ffffff',
+                        border: '1px solid #166534',
+                        borderRadius: '6px',
+                        fontWeight: 700,
+                        fontSize: '0.82rem',
+                        padding: '0.55rem 0.75rem',
+                        cursor: downloadingPhoto ? 'not-allowed' : 'pointer',
+                        boxShadow: '0 2px 4px rgba(21,128,61,0.2)',
+                        transition: 'all 0.15s ease',
                       }}
-                    />
+                    >
+                      <Download size={15} />
+                      <span>
+                        {downloadingPhoto
+                          ? bilingual('फोटो डाउनलोड हो रही है...', 'Downloading Photo...')
+                          : bilingual('कार्य समाप्ति फोटो डाउनलोड करें (Download Photo)', 'Download Completion Photo')}
+                      </span>
+                    </button>
+                    {downloadFeedback && (
+                      <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', color: '#15803d', fontWeight: 600, textAlign: 'center' }}>
+                        ✓ {downloadFeedback}
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -342,16 +436,14 @@ export default function ComplaintDetail() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.75rem', color: '#475569' }}>
-                  {complaint.completed_by_name && (
-                    <div>
-                      <strong>{bilingual('समाधानकर्ता कर्मी:', 'Resolved by:')}</strong> {complaint.completed_by_name}
-                    </div>
-                  )}
-                  {complaint.resolved_at && (
-                    <div>
-                      <strong>{bilingual('समाधान दिनांक व समय:', 'Resolved Date & Time:')}</strong> {formatDateTime(complaint.resolved_at)}
-                    </div>
-                  )}
+                  <div>
+                    <strong>{bilingual('समाधानकर्ता:', 'Resolved by:')}</strong>{' '}
+                    {complaint.completed_by_name || complaint.assigned_to || (complaint.assigned_department ? `${complaint.assigned_department} Team` : 'नगर निगम रीवा फील्ड टीम')}
+                  </div>
+                  <div>
+                    <strong>{bilingual('समाधान दिनांक व समय:', 'Resolved Date & Time:')}</strong>{' '}
+                    {formatDateTime(complaint.resolved_at || complaint.updated_at)}
+                  </div>
                 </div>
               </div>
             )}

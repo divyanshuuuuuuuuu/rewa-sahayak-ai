@@ -19,6 +19,8 @@ import { demoDepartments } from '../../data/demoData';
 import MapView from '../../components/MapView';
 import type { ComplaintStatus, Severity } from '../../types';
 import { useGov } from '../../context/GovContext';
+import { downloadPhotoFile, getCompletionPhotoFilename } from '../../services/downloadService';
+import { logAudit } from '../../services/departmentAccountService';
 
 export default function AdminComplaintDetail() {
   const { id } = useParams();
@@ -244,7 +246,7 @@ export default function AdminComplaintDetail() {
     }
   };
 
-  const handleReopen = () => {
+  const handleReopen = async () => {
     if (!reopenReason.trim() || !complaint) return;
     setReopening(true);
     try {
@@ -252,6 +254,13 @@ export default function AdminComplaintDetail() {
       if (updated) {
         setComplaint({ ...updated });
         setReopenReason('');
+        await logAudit({
+          action: 'COMPLAINT_REOPENED',
+          department_name: complaint.assigned_department || 'General Administration',
+          complaint_ref: complaint.ticket_number,
+          performed_by: 'Admin Officer',
+          details: `Reopened complaint #${complaint.ticket_number}. Reason: ${reopenReason.trim()}`,
+        });
       }
     } finally {
       setReopening(false);
@@ -443,6 +452,19 @@ export default function AdminComplaintDetail() {
                     alt="Resolved Proof"
                     style={{ width: '100%', borderRadius: 8, maxHeight: 180, objectFit: 'cover', marginBottom: '0.5rem', border: '2px solid #22c55e' }}
                   />
+                  <button
+                    id="download-completion-photo-btn"
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ width: '100%', justifyContent: 'center', background: '#15803d', color: '#fff', borderColor: '#166534', fontWeight: 700, marginBottom: '0.6rem' }}
+                    onClick={async () => {
+                      const filename = getCompletionPhotoFilename(complaint.ticket_number, complaint.video_url);
+                      await downloadPhotoFile(complaint.video_url!, filename);
+                    }}
+                  >
+                    <Download size={14} />
+                    <span>{bilingual('समाधान फोटो डाउनलोड करें', 'Download Completion Photo')}</span>
+                  </button>
                   <div style={{ fontSize: '0.78rem', color: '#15803d', fontWeight: 700, marginBottom: '0.4rem' }}>
                     ✓ {bilingual('स्थल समाधान फोटो सत्यापित', 'On-Site Completion Photo Verified')}
                   </div>

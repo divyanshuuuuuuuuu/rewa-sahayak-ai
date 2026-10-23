@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Eye, EyeOff, Mail, Lock, HardHat, ArrowLeft } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../services/supabase";
@@ -7,6 +7,10 @@ import { AshokaEmblem } from "../components/Emblem";
 
 export default function WorkerLogin() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const targetRedirect = searchParams.get("redirect") || (location.state as any)?.from || "/worker";
+
   const { user, profile, signIn, loading: authLoading } = useAuth();
 
   const [email, setEmail] = useState("");
@@ -15,16 +19,16 @@ export default function WorkerLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // If already logged in as worker, redirect
+  // If already logged in, redirect to intended target
   useEffect(() => {
     if (!authLoading && user && profile) {
       if (profile.role === "worker") {
-        navigate("/worker", { replace: true });
+        navigate(targetRedirect, { replace: true });
       } else if (profile.role === "admin" || profile.role === "superadmin") {
-        navigate("/admin", { replace: true });
+        navigate(targetRedirect.startsWith("/worker/task") ? targetRedirect : "/admin", { replace: true });
       }
     }
-  }, [user, profile, authLoading, navigate]);
+  }, [user, profile, authLoading, navigate, targetRedirect]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,10 +85,10 @@ export default function WorkerLogin() {
         }
 
         if (prof?.role === "worker") {
-          navigate("/worker", { replace: true });
+          navigate(targetRedirect, { replace: true });
           return;
         } else if (prof?.role === "admin" || prof?.role === "superadmin") {
-          navigate("/admin", { replace: true });
+          navigate(targetRedirect.startsWith("/worker/task") ? targetRedirect : "/admin", { replace: true });
           return;
         } else {
           // Citizen or unrecognized — sign them out and show error
@@ -170,10 +174,10 @@ export default function WorkerLogin() {
           </div>
 
           <h1 style={{ fontSize: "1.35rem", fontWeight: 900, color: "#0b3a6d", marginBottom: "0.25rem" }}>
-            Field Worker Portal
+            Department & Worker Portal
           </h1>
           <p style={{ color: "#64748b", fontSize: "0.82rem" }}>
-            Department workers — sign in to view your assignments
+            Sign in with your official department account or field credentials
           </p>
         </div>
 
@@ -197,15 +201,15 @@ export default function WorkerLogin() {
           <div>
             <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, color: "#334155", marginBottom: "0.4rem" }}>
               <Mail size={13} style={{ verticalAlign: "middle", marginRight: 4 }} />
-              Email Address
+              Department Username or Email
             </label>
             <input
               id="worker-email"
-              type="email"
+              type="text"
               className="form-input"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="worker@rewa.gov.in"
+              placeholder="e.g. water or water@rewa.gov.in"
               autoComplete="username"
               required
               style={{ fontSize: "1rem" }}
@@ -282,25 +286,144 @@ export default function WorkerLogin() {
             ) : (
               <>
                 <HardHat size={18} />
-                Sign In to Worker Portal
+                Sign In to Department Portal
               </>
             )}
           </button>
         </form>
 
-        {/* Quick Fill Demo Worker Credentials */}
+        {/* Quick Select Registered Department Accounts */}
         <div style={{
           marginTop: "1.25rem",
           padding: "0.85rem",
-          background: "#fef3c7",
-          borderRadius: 10,
-          border: "1px solid #f59e0b",
+          background: "#f0fdf4",
+          borderRadius: 12,
+          border: "1.5px solid #86efac",
           textAlign: "left",
         }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.35rem" }}>
-            <span style={{ fontWeight: 800, color: "#92400e", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-              <HardHat size={14} /> Demo Field Worker Access
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+            <span style={{ fontWeight: 800, color: "#166534", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+              🏛️ Official Department Logins
             </span>
+            <span style={{ fontSize: "0.7rem", color: "#15803d", fontWeight: 600 }}>Tap to autofill</span>
+          </div>
+          
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem" }}>
+            <button
+              type="button"
+              onClick={() => {
+                setEmail("water@rewa.gov.in");
+                setPassword("Water@Rewa2026!");
+                setError("");
+              }}
+              style={{
+                background: "#ffffff",
+                border: "1px solid #bae6fd",
+                borderRadius: 8,
+                padding: "0.45rem 0.5rem",
+                textAlign: "left",
+                cursor: "pointer",
+                fontSize: "0.72rem",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <strong style={{ color: "#0284c7" }}>💧 Water Dept</strong>
+              <span style={{ color: "#64748b" }}>water@rewa.gov.in</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setEmail("pwd@rewa.gov.in");
+                setPassword("Worker@Rewa2026!");
+                setError("");
+              }}
+              style={{
+                background: "#ffffff",
+                border: "1px solid #fed7aa",
+                borderRadius: 8,
+                padding: "0.45rem 0.5rem",
+                textAlign: "left",
+                cursor: "pointer",
+                fontSize: "0.72rem",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <strong style={{ color: "#c2410c" }}>🛣️ Roads & PWD</strong>
+              <span style={{ color: "#64748b" }}>pwd@rewa.gov.in</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setEmail("electric@rewa.gov.in");
+                setPassword("Electric@Rewa2026!");
+                setError("");
+              }}
+              style={{
+                background: "#ffffff",
+                border: "1px solid #e9d5ff",
+                borderRadius: 8,
+                padding: "0.45rem 0.5rem",
+                textAlign: "left",
+                cursor: "pointer",
+                fontSize: "0.72rem",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <strong style={{ color: "#7c3aed" }}>⚡ Electricity Dept</strong>
+              <span style={{ color: "#64748b" }}>electric@rewa.gov.in</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setEmail("waste@rewa.gov.in");
+                setPassword("Waste@Rewa2026!");
+                setError("");
+              }}
+              style={{
+                background: "#ffffff",
+                border: "1px solid #bbf7d0",
+                borderRadius: 8,
+                padding: "0.45rem 0.5rem",
+                textAlign: "left",
+                cursor: "pointer",
+                fontSize: "0.72rem",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <strong style={{ color: "#15803d" }}>♻️ Waste & Cleanliness</strong>
+              <span style={{ color: "#64748b" }}>waste@rewa.gov.in</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setEmail("sanitation@rewa.gov.in");
+                setPassword("Waste@Rewa2026!");
+                setError("");
+              }}
+              style={{
+                background: "#ffffff",
+                border: "1px solid #a7f3d0",
+                borderRadius: 8,
+                padding: "0.45rem 0.5rem",
+                textAlign: "left",
+                cursor: "pointer",
+                fontSize: "0.72rem",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <strong style={{ color: "#059669" }}>🧹 Sanitation Dept</strong>
+              <span style={{ color: "#64748b" }}>sanitation@rewa.gov.in</span>
+            </button>
+
             <button
               type="button"
               onClick={() => {
@@ -309,25 +432,23 @@ export default function WorkerLogin() {
                 setError("");
               }}
               style={{
-                background: "#b45309",
-                color: "#fff",
-                border: "none",
-                borderRadius: 4,
-                padding: "2px 8px",
-                fontSize: "0.72rem",
+                background: "#ffffff",
+                border: "1px solid #cbd5e1",
+                borderRadius: 8,
+                padding: "0.45rem 0.5rem",
+                textAlign: "left",
                 cursor: "pointer",
-                fontWeight: 700,
+                fontSize: "0.72rem",
+                display: "flex",
+                flexDirection: "column",
               }}
             >
-              Quick Fill
+              <strong style={{ color: "#334155" }}>👷 Worker Verma</strong>
+              <span style={{ color: "#64748b" }}>worker@rewa.gov.in</span>
             </button>
           </div>
-          <div style={{ fontSize: "0.75rem", color: "#b45309" }}>
-            <div>Worker: <strong>Er. S. K. Verma (PWD)</strong></div>
-            <div>Email: <code style={{ color: "#78350f" }}>worker@rewa.gov.in</code></div>
-            <div>Password: <code style={{ color: "#78350f" }}>Worker@Rewa2026!</code></div>
-          </div>
         </div>
+
 
         {/* Info box */}
         <div style={{

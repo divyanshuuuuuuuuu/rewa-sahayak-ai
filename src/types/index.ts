@@ -57,6 +57,7 @@ export interface Complaint {
   completed_by_name?: string | null;
   resolved_at?: string | null;
   resolution_note: string;
+  delay_reason?: string | null;
   updates: ComplaintUpdate[];
 }
 

@@ -76,6 +76,7 @@ export function dbReportToComplaint(r: any, history: any[] = []): Complaint {
     completed_by_name: r.completed_by_name || null,
     resolved_at: r.resolved_at || null,
     resolution_note: r.resolution_note || '',
+    delay_reason: r.delay_reason || null,
     updates,
   };
 }

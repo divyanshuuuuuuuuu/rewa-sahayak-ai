@@ -1,8 +1,9 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function WorkerRoute({ children }: { children: React.ReactNode }) {
   const { user, profile, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -15,14 +16,29 @@ export default function WorkerRoute({ children }: { children: React.ReactNode })
     );
   }
 
-  if (!user) return <Navigate to="/worker-login" replace />;
+  // Allow direct viewing of specific task details (/worker/tasks/:id or /worker/task/:id)
+  // so field links from WhatsApp/SMS open instantly without dead-ends
+  const isTaskDetailPage =
+    location.pathname.startsWith("/worker/tasks/") ||
+    location.pathname.startsWith("/worker/task/");
 
-  // Only 'worker' role can access worker dashboard
+  // Allow Admins and Superadmins to view worker tasks and operations
+  if (profile?.role === "admin" || profile?.role === "superadmin") {
+    return <>{children}</>;
+  }
+
+  // If viewing a specific task detail, allow direct access
+  if (isTaskDetailPage) {
+    return <>{children}</>;
+  }
+
+  // For general worker pages, require authenticated worker
+  if (!user) {
+    return <Navigate to={`/worker-login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+  }
+
+  // Only 'worker' role can access general worker dashboard
   if (profile?.role !== "worker") {
-    // Admins go to admin dashboard, everyone else to home
-    if (profile?.role === "admin" || profile?.role === "superadmin") {
-      return <Navigate to="/admin" replace />;
-    }
     return <Navigate to="/" replace />;
   }
 

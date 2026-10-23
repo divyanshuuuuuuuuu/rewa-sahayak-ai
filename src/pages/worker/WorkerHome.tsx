@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ClipboardList, PlayCircle, CheckCircle2, Bell, MapPin, Calendar,
-  ChevronRight, AlertCircle, HardHat, RefreshCw
+  ChevronRight, AlertCircle, HardHat, RefreshCw, Search, Filter,
+  Clock, ShieldAlert, Sparkles, User, LogOut, FileImage, ImageOff
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -10,6 +11,7 @@ import {
   getImageUrl, workerStatusColors, workerStatusLabels,
   type WorkerAssignment, type WorkerProfile
 } from "../../services/workerService";
+import { DEPARTMENT_METADATA } from "../../services/departmentAccountService";
 
 function StatusBadge({ status }: { status: string }) {
   const color = workerStatusColors[status] ?? "#64748b";
@@ -32,45 +34,54 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function StatCard({ value, label, color, icon: Icon }: { value: number; label: string; color: string; icon: any }) {
+function StatCard({ value, label, color, icon: Icon, onClick }: { value: number; label: string; color: string; icon: any; onClick?: () => void }) {
   return (
-    <div style={{
-      background: "#fff",
-      borderRadius: 14,
-      padding: "1rem 0.85rem",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "flex-start",
-      gap: "0.4rem",
-      boxShadow: "0 2px 8px rgba(11,58,109,0.07)",
-      border: `1px solid ${color}22`,
-      flex: 1,
-      minWidth: 0,
-    }}>
+    <div
+      onClick={onClick}
+      style={{
+        background: "#fff",
+        borderRadius: 14,
+        padding: "0.85rem 0.75rem",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-start",
+        gap: "0.35rem",
+        boxShadow: "0 2px 8px rgba(11,58,109,0.06)",
+        border: `1.5px solid ${color}25`,
+        flex: "1 1 calc(33.333% - 0.5rem)",
+        minWidth: 100,
+        cursor: onClick ? "pointer" : "default",
+        transition: "transform 0.15s, box-shadow 0.15s",
+      }}
+    >
       <div style={{
-        width: 34,
-        height: 34,
+        width: 32,
+        height: 32,
         background: `${color}15`,
-        borderRadius: 10,
+        borderRadius: 8,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
       }}>
-        <Icon size={18} color={color} />
+        <Icon size={16} color={color} />
       </div>
-      <div style={{ fontSize: "1.5rem", fontWeight: 900, color, lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: "0.7rem", color: "#64748b", fontWeight: 600, lineHeight: 1.2 }}>{label}</div>
+      <div style={{ fontSize: "1.45rem", fontWeight: 900, color, lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: "0.68rem", color: "#64748b", fontWeight: 600, lineHeight: 1.2 }}>{label}</div>
     </div>
   );
 }
 
 function AssignmentCard({ assignment }: { assignment: WorkerAssignment }) {
   const imageUrl = assignment.before_image_path
-    ? getImageUrl(assignment.before_image_path, "report-images")
+    ? (assignment.before_image_path.startsWith("http")
+        ? assignment.before_image_path
+        : getImageUrl(assignment.before_image_path, "report-images"))
     : null;
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+
+  const isResolved = assignment.current_status === "RESOLVED";
 
   return (
     <div style={{
@@ -79,13 +90,15 @@ function AssignmentCard({ assignment }: { assignment: WorkerAssignment }) {
       overflow: "hidden",
       boxShadow: "0 2px 10px rgba(11,58,109,0.07)",
       border: "1px solid #e2e8f0",
+      display: "flex",
+      flexDirection: "column",
     }}>
-      {/* Thumbnail */}
-      {imageUrl && (
-        <div style={{ position: "relative", height: 130 }}>
+      {/* Top Banner with Image if present */}
+      {imageUrl ? (
+        <div style={{ position: "relative", height: 130, background: "#f1f5f9" }}>
           <img
             src={imageUrl}
-            alt="Complaint"
+            alt="Citizen Complaint Evidence"
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
             onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
@@ -93,42 +106,52 @@ function AssignmentCard({ assignment }: { assignment: WorkerAssignment }) {
             position: "absolute",
             top: 8,
             left: 8,
-            background: "rgba(0,0,0,0.6)",
+            background: "rgba(0,0,0,0.65)",
             color: "#fff",
-            fontSize: "0.65rem",
-            fontWeight: 700,
-            padding: "2px 8px",
-            borderRadius: 20,
+            fontSize: "0.62rem",
+            fontWeight: 800,
+            padding: "2px 7px",
+            borderRadius: 12,
+            letterSpacing: "0.03em",
           }}>
-            📷 BEFORE
+            📷 CITIZEN EVIDENCE
           </div>
           <div style={{ position: "absolute", top: 8, right: 8 }}>
             <StatusBadge status={assignment.current_status} />
           </div>
         </div>
-      )}
-      {!imageUrl && (
-        <div style={{ padding: "0.75rem 1rem 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      ) : (
+        <div style={{ padding: "0.75rem 1rem 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: "0.68rem", color: "#64748b", display: "flex", alignItems: "center", gap: "0.25rem" }}>
+            <ImageOff size={13} /> Text Grievance
+          </span>
           <StatusBadge status={assignment.current_status} />
         </div>
       )}
 
-      <div style={{ padding: "0.85rem 1rem 1rem" }}>
-        {/* Reference */}
-        <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#0b3a6d", marginBottom: "0.3rem" }}>
-          #{assignment.reference_number}
+      <div style={{ padding: "0.85rem 1rem 1rem", flex: 1, display: "flex", flexDirection: "column" }}>
+        {/* Reference & Priority */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.3rem" }}>
+          <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#0b3a6d" }}>
+            #{assignment.reference_number}
+          </span>
+          {assignment.severity === "HIGH" && (
+            <span style={{ background: "#fee2e2", color: "#dc2626", fontSize: "0.62rem", fontWeight: 800, padding: "1px 6px", borderRadius: 10 }}>
+              ⚡ HIGH PRIORITY
+            </span>
+          )}
         </div>
 
         {/* Title */}
-        <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.9rem", lineHeight: 1.3, marginBottom: "0.5rem" }}>
+        <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.92rem", lineHeight: 1.35, marginBottom: "0.4rem" }}>
           {assignment.title}
         </div>
 
-        {/* Category */}
-        <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.5rem" }}>
-          {assignment.category}
+        {/* Category & Department */}
+        <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.45rem" }}>
+          <span style={{ fontWeight: 600, color: "#334155" }}>{assignment.category}</span>
           {assignment.assigned_department_name && (
-            <span style={{ marginLeft: "0.4rem", color: "#0b3a6d", fontWeight: 600 }}>
+            <span style={{ marginLeft: "0.4rem", color: "#0b3a6d" }}>
               • {assignment.assigned_department_name}
             </span>
           )}
@@ -136,40 +159,47 @@ function AssignmentCard({ assignment }: { assignment: WorkerAssignment }) {
 
         {/* Location */}
         {assignment.location_description && (
-          <div style={{ display: "flex", alignItems: "flex-start", gap: "0.35rem", fontSize: "0.75rem", color: "#475569", marginBottom: "0.5rem" }}>
-            <MapPin size={12} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ display: "flex", alignItems: "flex-start", gap: "0.35rem", fontSize: "0.75rem", color: "#475569", marginBottom: "0.45rem" }}>
+            <MapPin size={12} style={{ flexShrink: 0, marginTop: 2, color: "#e65100" }} />
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>
               {assignment.location_description}
             </span>
           </div>
         )}
 
-        {/* Date */}
-        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.72rem", color: "#94a3b8", marginBottom: "0.85rem" }}>
-          <Calendar size={12} />
-          Assigned: {formatDate(assignment.updated_at)}
+        {/* Date & Completion Status */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.72rem", color: "#94a3b8", marginBottom: "0.85rem", marginTop: "auto" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+            <Calendar size={11} /> {formatDate(assignment.updated_at || assignment.submitted_at)}
+          </span>
+          {isResolved ? (
+            <span style={{ color: "#15803d", fontWeight: 700 }}>✓ Evidence Saved</span>
+          ) : (
+            <span style={{ color: "#d97706", fontWeight: 600 }}>Action Required</span>
+          )}
         </div>
 
-        {/* View Details button */}
+        {/* View Details Action Link */}
         <Link
-          to={`/worker/task/${assignment.id}`}
+          to={`/worker/tasks/${assignment.id}`}
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: "0.4rem",
-            background: "linear-gradient(135deg, #0b3a6d, #1d4ed8)",
-            color: "#fff",
+            background: isResolved ? "#f0fdf4" : "linear-gradient(135deg, #0b3a6d, #1d4ed8)",
+            color: isResolved ? "#15803d" : "#fff",
+            border: isResolved ? "1.5px solid #86efac" : "none",
             borderRadius: 10,
             padding: "0.65rem 1rem",
             fontWeight: 700,
-            fontSize: "0.85rem",
+            fontSize: "0.84rem",
             textDecoration: "none",
             width: "100%",
           }}
         >
-          View Task
-          <ChevronRight size={16} />
+          {isResolved ? "View Resolution Proof" : "View Details & Action"}
+          <ChevronRight size={15} />
         </Link>
       </div>
     </div>
@@ -177,12 +207,19 @@ function AssignmentCard({ assignment }: { assignment: WorkerAssignment }) {
 }
 
 export default function WorkerHome() {
-  const { profile } = useAuth();
+  const navigate = useNavigate();
+  const { profile, signOut } = useAuth();
   const [assignments, setAssignments] = useState<WorkerAssignment[]>([]);
   const [workerProfile, setWorkerProfile] = useState<WorkerProfile | null>(null);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Search & Filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [sortBy, setSortBy] = useState<"urgent" | "oldest" | "newest">("urgent");
 
   const loadData = async () => {
     const [{ assignments: a }, { profile: wp }, { notifications: n }] = await Promise.all([
@@ -204,16 +241,60 @@ export default function WorkerHome() {
     loadData();
   };
 
-  // Stats
+  // Real database-calculated stats
+  const total = assignments.length;
   const newAssignments = assignments.filter(a => a.current_status === "ASSIGNED").length;
   const inProgress = assignments.filter(a => a.current_status === "IN_PROGRESS").length;
   const resolved = assignments.filter(a => a.current_status === "RESOLVED").length;
-  const total = assignments.length;
 
-  // Priority tasks: ASSIGNED + IN_PROGRESS, most recent first
-  const priorityTasks = assignments
+  const todayStr = new Date().toISOString().split("T")[0];
+  const completedToday = assignments.filter(
+    a => a.current_status === "RESOLVED" && a.resolved_at && a.resolved_at.startsWith(todayStr)
+  ).length;
+
+  // Extract unique categories for filtering
+  const availableCategories = Array.from(new Set(assignments.map(a => a.category).filter(Boolean)));
+
+  // Filter & Search
+  const filteredAssignments = assignments.filter(a => {
+    // Status
+    if (statusFilter !== "all" && a.current_status !== statusFilter) return false;
+    // Category
+    if (categoryFilter !== "all" && a.category !== categoryFilter) return false;
+    // Search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const match =
+        a.reference_number?.toLowerCase().includes(q) ||
+        a.title?.toLowerCase().includes(q) ||
+        a.location_description?.toLowerCase().includes(q) ||
+        a.category?.toLowerCase().includes(q) ||
+        a.description?.toLowerCase().includes(q);
+      if (!match) return false;
+    }
+    return true;
+  });
+
+  // Sorting
+  const sortedAssignments = [...filteredAssignments].sort((a, b) => {
+    if (sortBy === "urgent") {
+      if (a.severity === "HIGH" && b.severity !== "HIGH") return -1;
+      if (b.severity === "HIGH" && a.severity !== "HIGH") return 1;
+      return new Date(b.updated_at || b.submitted_at).getTime() - new Date(a.updated_at || a.submitted_at).getTime();
+    }
+    if (sortBy === "oldest") {
+      return new Date(a.submitted_at).getTime() - new Date(b.submitted_at).getTime();
+    }
+    return new Date(b.updated_at || b.submitted_at).getTime() - new Date(a.updated_at || a.submitted_at).getTime();
+  });
+
+  // Oldest unresolved assignment requiring urgent attention
+  const oldestPending = assignments
     .filter(a => a.current_status === "ASSIGNED" || a.current_status === "IN_PROGRESS")
-    .slice(0, 5);
+    .sort((a, b) => new Date(a.submitted_at).getTime() - new Date(b.submitted_at).getTime())[0];
+
+  const deptKey = workerProfile?.department_key || "water";
+  const deptMeta = DEPARTMENT_METADATA[deptKey] || { icon: "🏛️", badgeColor: "#0b3a6d", bgLight: "#eff6ff", labelHi: "" };
 
   const getGreeting = () => {
     const h = new Date().getHours();
@@ -227,61 +308,85 @@ export default function WorkerHome() {
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60dvh" }}>
         <div style={{ textAlign: "center" }}>
           <div className="spinner" style={{ margin: "0 auto 1rem" }} />
-          <p style={{ color: "#0b3a6d", fontWeight: 600 }}>Loading your dashboard...</p>
+          <p style={{ color: "#0b3a6d", fontWeight: 600 }}>Loading department queue...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: "1rem", maxWidth: 600, margin: "0 auto" }}>
-      {/* ─── Greeting Header ─── */}
+    <div style={{ padding: "1rem", maxWidth: 640, margin: "0 auto" }}>
+      {/* ─── Department Header Banner ─── */}
       <div style={{
-        background: "linear-gradient(135deg, #0b3a6d, #1d4ed8)",
+        background: "linear-gradient(135deg, #061a30 0%, #0b3a6d 60%, #1d4ed8 100%)",
         borderRadius: 16,
         padding: "1.25rem",
-        marginBottom: "1.25rem",
+        marginBottom: "1rem",
         color: "#fff",
-        display: "flex",
-        alignItems: "center",
-        gap: "0.75rem",
+        boxShadow: "0 4px 16px rgba(11,58,109,0.2)",
       }}>
-        <div style={{
-          width: 50,
-          height: 50,
-          background: "rgba(255,255,255,0.15)",
-          borderRadius: "50%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-        }}>
-          <HardHat size={26} color="#fcd34d" />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.7)", marginBottom: "0.2rem" }}>
-            {getGreeting()},
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", marginBottom: "0.75rem" }}>
+          <div style={{
+            width: 48,
+            height: 48,
+            background: "rgba(255,255,255,0.18)",
+            borderRadius: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "1.6rem",
+            flexShrink: 0,
+          }}>
+            {deptMeta.icon}
           </div>
-          <div style={{ fontWeight: 800, fontSize: "1.05rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {profile?.full_name ?? "Field Worker"}
-          </div>
-          {workerProfile && (
-            <div style={{ fontSize: "0.72rem", color: "#93c5fd", marginTop: "0.15rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {workerProfile.designation} • {workerProfile.department_name}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.2rem" }}>
+              <span style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.75)" }}>{getGreeting()},</span>
+              <span style={{ background: "rgba(34,197,94,0.25)", color: "#86efac", fontSize: "0.6rem", fontWeight: 800, padding: "1px 6px", borderRadius: 10 }}>
+                ● LIVE QUEUE
+              </span>
             </div>
-          )}
+            <h1 style={{ fontWeight: 900, fontSize: "1.1rem", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {workerProfile?.department_name || profile?.full_name || "Department Portal"}
+            </h1>
+            <p style={{ fontSize: "0.74rem", color: "#93c5fd", marginTop: "0.15rem", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {workerProfile?.designation || "Authorized Municipal Operations Account"}
+            </p>
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            style={{
+              background: "rgba(255,255,255,0.15)",
+              border: "none",
+              borderRadius: 8,
+              padding: "0.45rem",
+              cursor: "pointer",
+              color: "#fff",
+              display: "flex",
+            }}
+            title="Refresh Live Data"
+          >
+            <RefreshCw size={16} style={{ animation: refreshing ? "spin 0.8s linear infinite" : "none" }} />
+          </button>
         </div>
-        <button
-          onClick={handleRefresh}
-          disabled={refreshing}
-          style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, padding: "0.4rem", cursor: "pointer", color: "#fff", display: "flex" }}
-          aria-label="Refresh"
-        >
-          <RefreshCw size={16} style={{ animation: refreshing ? "spin 0.8s linear infinite" : "none" }} />
-        </button>
+
+        <div style={{
+          background: "rgba(0,0,0,0.2)",
+          borderRadius: 10,
+          padding: "0.5rem 0.75rem",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: "0.72rem",
+          color: "rgba(255,255,255,0.85)",
+        }}>
+          <span>Authorized Department ID: <strong>{deptKey.toUpperCase()}</strong></span>
+          <span>Logged in as: <strong>{workerProfile?.email || "Department"}</strong></span>
+        </div>
       </div>
 
-      {/* Notification bar */}
+      {/* ─── Notifications Banner (if unread) ─── */}
       {unreadNotifs > 0 && (
         <Link
           to="/worker/notifications"
@@ -291,32 +396,187 @@ export default function WorkerHome() {
             gap: "0.6rem",
             background: "#fffbeb",
             border: "1px solid #fcd34d",
-            borderRadius: 10,
+            borderRadius: 12,
             padding: "0.7rem 1rem",
-            marginBottom: "1.25rem",
+            marginBottom: "1rem",
             textDecoration: "none",
           }}
         >
           <Bell size={16} color="#d97706" />
-          <span style={{ flex: 1, fontSize: "0.82rem", fontWeight: 600, color: "#92400e" }}>
-            You have {unreadNotifs} unread notification{unreadNotifs > 1 ? "s" : ""}
+          <span style={{ flex: 1, fontSize: "0.82rem", fontWeight: 700, color: "#92400e" }}>
+            You have {unreadNotifs} unread assignment notification{unreadNotifs > 1 ? "s" : ""}
           </span>
           <ChevronRight size={16} color="#d97706" />
         </Link>
       )}
 
-      {/* ─── Stats Cards ─── */}
-      <div style={{ display: "flex", gap: "0.65rem", marginBottom: "1.25rem", flexWrap: "wrap" }}>
-        <StatCard value={newAssignments} label="New Assignments" color="#d97706" icon={Bell} />
-        <StatCard value={inProgress} label="In Progress" color="#7c3aed" icon={PlayCircle} />
-        <StatCard value={resolved} label="Completed" color="#15803d" icon={CheckCircle2} />
-        <StatCard value={total} label="Total Tasks" color="#0b3a6d" icon={ClipboardList} />
+      {/* ─── Live Statistics Grid (6 Cards from Real DB) ─── */}
+      <div style={{ marginBottom: "1.25rem" }}>
+        <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#0b3a6d", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+          <span>📊 Department Complaint Statistics (Live)</span>
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <StatCard
+            value={total}
+            label="Total Complaints"
+            color="#0b3a6d"
+            icon={ClipboardList}
+            onClick={() => setStatusFilter("all")}
+          />
+          <StatCard
+            value={newAssignments}
+            label="New Assignments"
+            color="#d97706"
+            icon={Bell}
+            onClick={() => setStatusFilter("ASSIGNED")}
+          />
+          <StatCard
+            value={inProgress}
+            label="Work In Progress"
+            color="#7c3aed"
+            icon={PlayCircle}
+            onClick={() => setStatusFilter("IN_PROGRESS")}
+          />
+          <StatCard
+            value={resolved}
+            label="Resolved Total"
+            color="#15803d"
+            icon={CheckCircle2}
+            onClick={() => setStatusFilter("RESOLVED")}
+          />
+          <StatCard
+            value={completedToday}
+            label="Completed Today"
+            color="#059669"
+            icon={Sparkles}
+          />
+          <StatCard
+            value={assignments.filter(a => a.severity === "HIGH" && a.current_status !== "RESOLVED").length}
+            label="High Severity"
+            color="#dc2626"
+            icon={ShieldAlert}
+            onClick={() => setSortBy("urgent")}
+          />
+        </div>
       </div>
 
-      {/* ─── Priority Tasks ─── */}
-      <div style={{ marginBottom: "0.85rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <h2 style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>
-          My Priority Tasks
+      {/* ─── Prominent Urgent / Oldest Pending Assignment Highlight ─── */}
+      {oldestPending && (
+        <div style={{
+          background: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+          border: "1.5px solid #f59e0b",
+          borderRadius: 14,
+          padding: "1rem",
+          marginBottom: "1.25rem",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.4rem" }}>
+            <span style={{ fontSize: "0.7rem", fontWeight: 800, color: "#b45309", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+              <Clock size={13} /> OLDEST PENDING ASSIGNMENT
+            </span>
+            <span style={{ background: "#f59e0b", color: "#fff", fontSize: "0.62rem", fontWeight: 800, padding: "1px 6px", borderRadius: 10 }}>
+              ACTION REQUIRED
+            </span>
+          </div>
+          <div style={{ fontWeight: 800, color: "#78350f", fontSize: "0.92rem", marginBottom: "0.3rem" }}>
+            #{oldestPending.reference_number}: {oldestPending.title}
+          </div>
+          <p style={{ fontSize: "0.76rem", color: "#92400e", margin: "0 0 0.6rem 0", lineHeight: 1.4 }}>
+            📍 {oldestPending.location_description} • Assigned: {new Date(oldestPending.submitted_at).toLocaleDateString()}
+          </p>
+          <Link
+            to={`/worker/tasks/${oldestPending.id}`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.35rem",
+              background: "#b45309",
+              color: "#fff",
+              padding: "0.45rem 0.85rem",
+              borderRadius: 8,
+              fontSize: "0.78rem",
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
+            Start Work Now <ChevronRight size={14} />
+          </Link>
+        </div>
+      )}
+
+      {/* ─── Search & Filter Controls ─── */}
+      <div style={{
+        background: "#fff",
+        borderRadius: 14,
+        padding: "0.85rem",
+        marginBottom: "1rem",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+        border: "1px solid #e2e8f0",
+      }}>
+        {/* Search Input */}
+        <div style={{ position: "relative", marginBottom: "0.6rem" }}>
+          <Search size={15} color="#94a3b8" style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)" }} />
+          <input
+            type="text"
+            className="form-input"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search by ticket #, problem, or area..."
+            style={{ paddingLeft: "2.2rem", fontSize: "0.84rem", width: "100%" }}
+          />
+        </div>
+
+        {/* Filters row */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.4rem" }}>
+          <div>
+            <label style={{ fontSize: "0.65rem", fontWeight: 700, color: "#64748b", display: "block", marginBottom: "0.2rem" }}>Status</label>
+            <select
+              className="form-input"
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              style={{ fontSize: "0.75rem", padding: "0.35rem 0.5rem" }}
+            >
+              <option value="all">All Statuses ({total})</option>
+              <option value="ASSIGNED">Assigned ({newAssignments})</option>
+              <option value="IN_PROGRESS">In Progress ({inProgress})</option>
+              <option value="RESOLVED">Resolved ({resolved})</option>
+            </select>
+          </div>
+
+          <div>
+            <label style={{ fontSize: "0.65rem", fontWeight: 700, color: "#64748b", display: "block", marginBottom: "0.2rem" }}>Category</label>
+            <select
+              className="form-input"
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              style={{ fontSize: "0.75rem", padding: "0.35rem 0.5rem" }}
+            >
+              <option value="all">All Categories</option>
+              {availableCategories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ fontSize: "0.65rem", fontWeight: 700, color: "#64748b", display: "block", marginBottom: "0.2rem" }}>Sort By</label>
+            <select
+              className="form-input"
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as any)}
+              style={{ fontSize: "0.75rem", padding: "0.35rem 0.5rem" }}
+            >
+              <option value="urgent">Urgent / Priority</option>
+              <option value="oldest">Oldest Pending</option>
+              <option value="newest">Recently Updated</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Department Complaints Queue Header ─── */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+        <h2 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a", margin: 0 }}>
+          Department Queue ({sortedAssignments.length})
         </h2>
         <Link
           to="/worker/tasks"
@@ -326,7 +586,8 @@ export default function WorkerHome() {
         </Link>
       </div>
 
-      {priorityTasks.length === 0 ? (
+      {/* ─── Complaint Cards List ─── */}
+      {sortedAssignments.length === 0 ? (
         <div style={{
           background: "#fff",
           borderRadius: 14,
@@ -335,55 +596,56 @@ export default function WorkerHome() {
           border: "1px dashed #cbd5e1",
         }}>
           <CheckCircle2 size={40} color="#22c55e" style={{ marginBottom: "0.75rem" }} />
-          <div style={{ fontWeight: 700, color: "#334155", marginBottom: "0.35rem" }}>All caught up!</div>
-          <div style={{ color: "#94a3b8", fontSize: "0.84rem" }}>
-            No pending assignments right now. Check back later.
+          <div style={{ fontWeight: 700, color: "#334155", marginBottom: "0.35rem" }}>No matching complaints found</div>
+          <div style={{ color: "#94a3b8", fontSize: "0.82rem" }}>
+            Try resetting your filters or check back when new assignments arrive.
           </div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {priorityTasks.map(a => (
+          {sortedAssignments.slice(0, 10).map(a => (
             <AssignmentCard key={a.id} assignment={a} />
           ))}
         </div>
       )}
 
-      {/* ─── Quick Links ─── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.65rem", marginTop: "1.25rem" }}>
-        {[
-          { to: "/worker/tasks", label: "All Assignments", icon: ClipboardList, color: "#d97706" },
-          { to: "/worker/in-progress", label: "In Progress", icon: PlayCircle, color: "#7c3aed" },
-          { to: "/worker/completed", label: "Completed", icon: CheckCircle2, color: "#15803d" },
-          { to: "/worker/notifications", label: "Notifications", icon: Bell, color: "#0284c7", badge: unreadNotifs },
-        ].map(link => (
-          <Link
-            key={link.to}
-            to={link.to}
-            style={{
-              background: "#fff",
-              borderRadius: 12,
-              padding: "0.85rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.6rem",
-              textDecoration: "none",
-              color: "#0f172a",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
-              border: "1px solid #e2e8f0",
-              position: "relative",
-            }}
-          >
-            <div style={{ width: 32, height: 32, background: `${link.color}15`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <link.icon size={16} color={link.color} />
-            </div>
-            <span style={{ fontWeight: 600, fontSize: "0.8rem", flex: 1 }}>{link.label}</span>
-            {link.badge && link.badge > 0 ? (
-              <span style={{ background: "#ef4444", color: "#fff", fontSize: "0.6rem", fontWeight: 800, borderRadius: 20, padding: "1px 5px" }}>
-                {link.badge}
-              </span>
-            ) : null}
-          </Link>
-        ))}
+      {/* ─── Department Portal Fast Navigation Sections ─── */}
+      <div style={{ marginTop: "1.5rem" }}>
+        <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#0b3a6d", marginBottom: "0.5rem" }}>
+          🧭 Portal Navigation Sections
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+          {[
+            { to: "/worker/tasks", label: "All Department Complaints", icon: ClipboardList, color: "#0b3a6d" },
+            { to: "/worker/tasks?filter=ASSIGNED", label: "New Assignments", icon: Bell, color: "#d97706" },
+            { to: "/worker/in-progress", label: "Work In Progress", icon: PlayCircle, color: "#7c3aed" },
+            { to: "/worker/completed", label: "Resolved Complaints", icon: CheckCircle2, color: "#15803d" },
+            { to: "/worker/completed", label: "Completion Evidence", icon: FileImage, color: "#059669" },
+            { to: "/worker/profile", label: "Department Profile", icon: User, color: "#475569" },
+          ].map(link => (
+            <Link
+              key={link.to + link.label}
+              to={link.to}
+              style={{
+                background: "#fff",
+                borderRadius: 10,
+                padding: "0.75rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                textDecoration: "none",
+                color: "#0f172a",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+                border: "1px solid #e2e8f0",
+              }}
+            >
+              <div style={{ width: 28, height: 28, background: `${link.color}15`, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <link.icon size={15} color={link.color} />
+              </div>
+              <span style={{ fontWeight: 600, fontSize: "0.76rem" }}>{link.label}</span>
+            </Link>
+          ))}
+        </div>
       </div>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
