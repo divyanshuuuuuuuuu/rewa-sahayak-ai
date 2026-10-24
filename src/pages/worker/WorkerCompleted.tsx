@@ -144,7 +144,7 @@ function CompletionCard({ assignment }: { assignment: WorkerAssignment }) {
         )}
 
         {/* Action Buttons: Download & View */}
-        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
           {afterUrl && (
             <button
               type="button"
@@ -154,21 +154,22 @@ function CompletionCard({ assignment }: { assignment: WorkerAssignment }) {
               style={{
                 flex: 1,
                 minWidth: 140,
+                minHeight: 44,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: "0.35rem",
-                background: "#15803d",
+                background: "var(--gov-green)",
                 color: "#fff",
                 border: "none",
                 borderRadius: 8,
                 padding: "0.55rem 0.75rem",
-                fontSize: "0.78rem",
+                fontSize: "0.82rem",
                 fontWeight: 700,
                 cursor: downloading ? "not-allowed" : "pointer",
               }}
             >
-              <Download size={14} />
+              <Download size={15} />
               {downloading ? "Downloading..." : "Download Photo"}
             </button>
           )}
@@ -180,17 +181,18 @@ function CompletionCard({ assignment }: { assignment: WorkerAssignment }) {
               alignItems: "center",
               justifyContent: "center",
               gap: "0.3rem",
+              minHeight: 44,
               background: "#eff6ff",
               color: "#1d4ed8",
               border: "1px solid #bfdbfe",
               borderRadius: 8,
-              padding: "0.55rem 0.75rem",
-              fontSize: "0.78rem",
-              fontWeight: 600,
+              padding: "0.55rem 0.85rem",
+              fontSize: "0.82rem",
+              fontWeight: 700,
               textDecoration: "none",
             }}
           >
-            <Eye size={14} />
+            <Eye size={15} />
             Details
           </Link>
 
@@ -202,12 +204,13 @@ function CompletionCard({ assignment }: { assignment: WorkerAssignment }) {
               alignItems: "center",
               justifyContent: "center",
               gap: "0.3rem",
+              minHeight: 44,
               background: "#f8fafc",
               color: "#475569",
               border: "1px solid #cbd5e1",
               borderRadius: 8,
-              padding: "0.55rem 0.75rem",
-              fontSize: "0.78rem",
+              padding: "0.55rem 0.85rem",
+              fontSize: "0.82rem",
               fontWeight: 600,
               textDecoration: "none",
             }}

@@ -156,23 +156,26 @@ export default function ComplaintDetail() {
                 </span>
               </div>
 
-              <h1 style={{ fontSize: '1.45rem', fontWeight: 900, color: '#0b3a6d', marginBottom: '0.25rem' }}>
+              <h1 style={{ fontSize: 'clamp(1.2rem, 3vw, 1.45rem)', fontWeight: 800, color: 'var(--gov-navy)', marginBottom: '0.35rem', lineHeight: 1.3 }}>
                 {categoryIcons[complaint.category]} {complaint.title}
               </h1>
 
-              <p style={{ color: '#64748b', fontSize: '0.85rem' }}>
-                <strong style={{ color: '#0b3a6d' }}>{complaint.ticket_number}</strong> •{' '}
-                {bilingual('पंजीकृत तिथि:', 'Registration Date:')} {formatDateTime(complaint.created_at)}
+              <p style={{ color: '#526273', fontSize: '0.85rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.4rem' }}>
+                <span className="ticket-badge" style={{ color: 'var(--gov-navy)', background: '#eef4fb', padding: '2px 6px', borderRadius: '4px' }}>
+                  {complaint.ticket_number}
+                </span>
+                <span>•</span>
+                <span>{bilingual('पंजीकृत तिथि:', 'Registration Date:')} {formatDateTime(complaint.created_at)}</span>
               </p>
             </div>
 
-            <div style={{ textAlign: 'right' }}>
+            <div style={{ textAlign: 'left', flexShrink: 0 }}>
               <span className="gov-seal-badge">
-                <ShieldCheck size={14} color="#0b3a6d" />
-                {bilingual('रीवा नगर निगम पंजीकृत', 'Rewa Municipal Corporation Registered')}
+                <ShieldCheck size={14} color="var(--gov-navy)" />
+                {bilingual('रीवा नगर निगम ई-प्रणाली पंजीकृत', 'Rewa Nagar Nigam Registered')}
               </span>
-              <p style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: 700, marginTop: '0.35rem' }}>
-                {bilingual('✓ नागरिक अधिकार पत्र SLA: 48 घंटे में समाधान', '✓ Citizen Charter SLA: 48hr Resolution')}
+              <p style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: 700, marginTop: '0.35rem', margin: '0.35rem 0 0' }}>
+                {bilingual('✓ नागरिक अधिकार पत्र SLA: 48 घंटे में समाधान', '✓ Citizen Charter SLA: 48hr Target')}
               </p>
             </div>
           </div>
@@ -395,17 +398,18 @@ export default function ComplaintDetail() {
                       style={{
                         marginTop: '0.5rem',
                         width: '100%',
+                        minHeight: 44,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: '0.45rem',
-                        background: '#15803d',
+                        background: 'var(--gov-green)',
                         color: '#ffffff',
                         border: '1px solid #166534',
                         borderRadius: '6px',
                         fontWeight: 700,
-                        fontSize: '0.82rem',
-                        padding: '0.55rem 0.75rem',
+                        fontSize: '0.84rem',
+                        padding: '0.6rem 0.75rem',
                         cursor: downloadingPhoto ? 'not-allowed' : 'pointer',
                         boxShadow: '0 2px 4px rgba(21,128,61,0.2)',
                         transition: 'all 0.15s ease',

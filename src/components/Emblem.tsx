@@ -1,6 +1,14 @@
 import React from 'react';
 
-export function AshokaEmblem({ size = 48, className = '' }: { size?: number; className?: string }) {
+/**
+ * Professional Municipal Civic Tech Insignia
+ * Designed specifically for Rewa Sahayak AI Civic Grievance Redressal Portal.
+ * Complies with public demonstration ethics:
+ * - Does not impersonate official national emblem of India.
+ * - Does not falsely claim official government seal.
+ * - Conveys civic infrastructure, municipal responsibility, public transparency, and AI innovation.
+ */
+export function CivicInsignia({ size = 48, className = '' }: { size?: number; className?: string }) {
   return (
     <svg
       width={size}
@@ -9,170 +17,156 @@ export function AshokaEmblem({ size = 48, className = '' }: { size?: number; cla
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
-      aria-label="National Emblem of India"
+      aria-label="Rewa Sahayak AI Civic Service Insignia"
+      role="img"
     >
-      {/* Circle base with gold/navy civic styling */}
-      <circle cx="50" cy="50" r="48" fill="#FFFFFF" stroke="#0B3A6D" strokeWidth="2.5" />
-      <circle cx="50" cy="50" r="44" fill="#F8FAFC" stroke="#D97706" strokeWidth="1" strokeDasharray="2 2" />
-      
-      {/* Ashoka Lion representation */}
-      {/* Center Lion Head */}
-      <path
-        d="M50 20 C46 20 42 23 42 28 C42 32 45 35 48 37 L48 44 C46 44 43 46 43 49 C43 52 46 54 50 54 C54 54 57 52 57 49 C57 46 54 44 52 44 L52 37 C55 35 58 32 58 28 C58 23 54 20 50 20 Z"
-        fill="#0B3A6D"
-      />
-      {/* Left Lion Head profile */}
-      <path
-        d="M40 25 C36 24 33 27 33 31 C33 34 35 37 38 39 L40 43 C38 44 36 46 36 48 C37 50 40 50 42 49 L43 45 L41 39 C41 37 41 35 40 33 Z"
-        fill="#0B3A6D"
-      />
-      {/* Right Lion Head profile */}
-      <path
-        d="M60 25 C64 24 67 27 67 31 C67 34 65 37 62 39 L60 43 C62 44 64 46 64 48 C63 50 60 50 58 49 L57 45 L59 39 C59 37 59 35 60 33 Z"
-        fill="#0B3A6D"
-      />
-      {/* Crown / Mane details */}
-      <circle cx="50" cy="22" r="3" fill="#D97706" />
-      <circle cx="36" cy="26" r="2.5" fill="#D97706" />
-      <circle cx="64" cy="26" r="2.5" fill="#D97706" />
+      {/* Outer authoritative circular border */}
+      <circle cx="50" cy="50" r="47" fill="#FFFFFF" stroke="#17365D" strokeWidth="2.5" />
+      <circle cx="50" cy="50" r="42" fill="#F4F6F8" stroke="#147D83" strokeWidth="1" strokeDasharray="3 2" />
 
-      {/* Ashoka Abacus Base */}
-      <rect x="28" y="55" width="44" height="6" rx="2" fill="#0B3A6D" />
-      {/* Ashoka Chakra in base */}
-      <circle cx="50" cy="58" r="4.5" fill="#FFFFFF" stroke="#0B3A6D" strokeWidth="1" />
-      <circle cx="50" cy="58" r="1.5" fill="#0B3A6D" />
-      {/* Bull and Horse emblems */}
-      <circle cx="36" cy="58" r="2" fill="#D97706" />
-      <circle cx="64" cy="58" r="2" fill="#D97706" />
-
-      {/* Lotus Bell Base */}
+      {/* Municipal Civic Building / Dome Silhouette */}
       <path
-        d="M32 62 C38 67 44 68 50 68 C56 68 62 67 68 62 L66 65 C60 70 55 71 50 71 C45 71 40 70 34 65 Z"
-        fill="#D97706"
+        d="M50 16 L50 21 M43 23 L57 23 M50 23 C42 27 40 33 40 38 L60 38 C60 33 58 27 50 23 Z"
+        fill="#17365D"
+        stroke="#17365D"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
       />
+      {/* Archway Columns */}
+      <rect x="36" y="38" width="28" height="4" rx="1" fill="#245B88" />
+      <rect x="38" y="42" width="4" height="15" rx="1" fill="#17365D" />
+      <rect x="45" y="42" width="4" height="15" rx="1" fill="#17365D" />
+      <rect x="51" y="42" width="4" height="15" rx="1" fill="#17365D" />
+      <rect x="58" y="42" width="4" height="15" rx="1" fill="#17365D" />
 
-      {/* Satyameva Jayate Banner / Text */}
-      <rect x="22" y="73" width="56" height="12" rx="3" fill="#0B3A6D" />
-      <text
-        x="50"
-        y="82"
-        textAnchor="middle"
-        fill="#FFFFFF"
-        fontSize="7"
-        fontWeight="800"
-        fontFamily="'Noto Sans Devanagari', sans-serif"
-        letterSpacing="0.5"
-      >
-        सत्यमेव जयते
-      </text>
+      {/* Base Foundation */}
+      <rect x="32" y="57" width="36" height="5" rx="1.5" fill="#17365D" />
 
-      {/* MP Govt Micro-banner */}
-      <text
-        x="50"
-        y="93"
-        textAnchor="middle"
-        fill="#0B3A6D"
-        fontSize="5"
-        fontWeight="700"
-        fontFamily="'Noto Sans Devanagari', sans-serif"
-      >
-        मध्य प्रदेश शासन
-      </text>
-    </svg>
-  );
-}
+      {/* Civic Tech Sparkles / AI node points */}
+      <circle cx="50" cy="30" r="2" fill="#147D83" />
+      <circle cx="28" cy="48" r="2.5" fill="#245B88" />
+      <circle cx="72" cy="48" r="2.5" fill="#245B88" />
 
-export function RewaMunicipalLogo({ size = 48, className = '' }: { size?: number; className?: string }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 100 100"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-label="Rewa Municipal Corporation Emblem"
-    >
-      <circle cx="50" cy="50" r="48" fill="#FFFFFF" stroke="#E65100" strokeWidth="2.5" />
-      <circle cx="50" cy="50" r="44" fill="#0B3A6D" />
-      <circle cx="50" cy="50" r="32" fill="#FFFFFF" stroke="#D97706" strokeWidth="1.5" />
-      
-      {/* Rewa Fort / White Tiger / Smart City icon representation */}
-      {/* Rewa Fort arches */}
+      {/* River Beehar & Bichhiya Confluence Waves at Base */}
       <path
-        d="M36 54 L36 44 L40 40 L44 44 L44 54 Z"
-        fill="#0B3A6D"
-      />
-      <path
-        d="M44 54 L44 38 L50 34 L56 38 L56 54 Z"
-        fill="#E65100"
-      />
-      <path
-        d="M56 54 L56 44 L60 40 L64 44 L64 54 Z"
-        fill="#0B3A6D"
-      />
-      {/* Water wave at base for Bichhiya & Beehar river confluence of Rewa */}
-      <path
-        d="M32 58 Q41 54 50 58 T68 58"
-        stroke="#0284C7"
+        d="M26 68 Q38 64 50 68 T74 68"
+        stroke="#147D83"
         strokeWidth="2.5"
         strokeLinecap="round"
         fill="none"
       />
       <path
-        d="M34 62 Q42 59 50 62 T66 62"
-        stroke="#15803D"
+        d="M29 73 Q40 70 50 73 T71 73"
+        stroke="#245B88"
         strokeWidth="2"
         strokeLinecap="round"
         fill="none"
       />
 
-      {/* Outer Circle Circular Hindi Text */}
+      {/* Civic Redressal Text Banner */}
+      <rect x="18" y="78" width="64" height="13" rx="3" fill="#17365D" />
       <text
         x="50"
-        y="13"
+        y="87"
         textAnchor="middle"
         fill="#FFFFFF"
         fontSize="6.5"
         fontWeight="800"
-        fontFamily="'Noto Sans Devanagari', sans-serif"
+        fontFamily="'Inter', 'Noto Sans Devanagari', sans-serif"
+        letterSpacing="0.4"
       >
-        नगर पालिक निगम रीवा
-      </text>
-
-      <text
-        x="50"
-        y="91"
-        textAnchor="middle"
-        fill="#FFD54F"
-        fontSize="6"
-        fontWeight="700"
-        fontFamily="sans-serif"
-        letterSpacing="0.8"
-      >
-        SMART CITY REWA
+        REWA SAHAYAK AI
       </text>
     </svg>
   );
 }
 
+/**
+ * Backward compatibility alias for AshokaEmblem
+ * Renders the legitimate, respectful CivicInsignia.
+ */
+export function AshokaEmblem(props: { size?: number; className?: string }) {
+  return <CivicInsignia {...props} />;
+}
+
+/**
+ * Backward compatibility alias for RewaMunicipalLogo
+ * Renders the legitimate, respectful CivicInsignia.
+ */
+export function RewaMunicipalLogo(props: { size?: number; className?: string }) {
+  return <CivicInsignia {...props} />;
+}
+
+/**
+ * Public Cleanliness & Sanitation Icon
+ */
 export function SwachhBharatLogo({ size = 32 }: { size?: number }) {
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} title="स्वच्छ भारत मिशन">
-      <svg width={size} height={size * 0.55} viewBox="0 0 100 55" fill="none">
-        {/* Spectacles of Mahatma Gandhi */}
-        <circle cx="28" cy="28" r="22" stroke="#15803D" strokeWidth="5" fill="#FFFFFF" />
-        <circle cx="72" cy="28" r="22" stroke="#15803D" strokeWidth="5" fill="#FFFFFF" />
-        {/* Bridge */}
-        <path d="M50 24 Q50 16 50 24" stroke="#15803D" strokeWidth="5" fill="none" />
-        <path d="M48 24 L52 24" stroke="#15803D" strokeWidth="5" />
-        {/* Spectacle sides */}
-        <path d="M6 24 L10 24" stroke="#15803D" strokeWidth="5" />
-        <path d="M90 24 L94 24" stroke="#15803D" strokeWidth="5" />
-        {/* Text inside lenses */}
-        <text x="28" y="32" textAnchor="middle" fill="#0B3A6D" fontSize="12" fontWeight="800" fontFamily="'Noto Sans Devanagari', sans-serif">स्वच्छ</text>
-        <text x="72" y="32" textAnchor="middle" fill="#0B3A6D" fontSize="12" fontWeight="800" fontFamily="'Noto Sans Devanagari', sans-serif">भारत</text>
+    <div
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '3px 8px',
+        borderRadius: '6px',
+        background: '#f0fdf4',
+        border: '1px solid #86efac',
+      }}
+      title="नागरिक स्वच्छता पहल (Civic Cleanliness Mission)"
+    >
+      <svg width={size} height={size * 0.55} viewBox="0 0 100 55" fill="none" role="img" aria-label="स्वच्छता मिशन">
+        <circle cx="28" cy="28" r="20" stroke="#166534" strokeWidth="4" fill="#FFFFFF" />
+        <circle cx="72" cy="28" r="20" stroke="#166534" strokeWidth="4" fill="#FFFFFF" />
+        <path d="M48 24 Q50 18 52 24" stroke="#166534" strokeWidth="4" fill="none" />
+        <text
+          x="28"
+          y="32"
+          textAnchor="middle"
+          fill="#17365D"
+          fontSize="11"
+          fontWeight="800"
+          fontFamily="'Noto Sans Devanagari', sans-serif"
+        >
+          स्वच्छ
+        </text>
+        <text
+          x="72"
+          y="32"
+          textAnchor="middle"
+          fill="#17365D"
+          fontSize="11"
+          fontWeight="800"
+          fontFamily="'Noto Sans Devanagari', sans-serif"
+        >
+          रीवा
+        </text>
       </svg>
     </div>
+  );
+}
+
+/**
+ * Clear Hackathon Demonstration Notice Badge
+ */
+export function CivicPrototypeBadge({ className = '' }: { className?: string }) {
+  return (
+    <span
+      className={className}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '0.35rem',
+        background: '#eff6ff',
+        color: '#1e40af',
+        border: '1px solid #bfdbfe',
+        borderRadius: '4px',
+        padding: '2px 7px',
+        fontSize: '0.72rem',
+        fontWeight: 700,
+      }}
+    >
+      <span>💡</span>
+      <span>Demonstration Prototype • Hackathon Initiative</span>
+    </span>
   );
 }

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, Cpu, Trash2, Droplets, Zap } from 'lucide-react';
-import { AshokaEmblem, RewaMunicipalLogo } from '../components/Emblem';
+import { CivicInsignia, CivicPrototypeBadge } from '../components/Emblem';
 import { useGov } from '../context/GovContext';
 
 export default function About() {
@@ -10,25 +10,21 @@ export default function About() {
     <div className="page fade-in">
       <div className="container" style={{ maxWidth: '860px' }}>
         
-        {/* Official Header */}
-        <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
-            <AshokaEmblem size={56} />
-            <RewaMunicipalLogo size={56} />
+        {/* Civic Portal Header */}
+        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '1rem' }}>
+            <CivicInsignia size={64} />
           </div>
-          <span className="gov-seal-badge" style={{ marginBottom: '0.5rem' }}>
-            {bilingual(
-              'नगर पालिक निगम, रीवा • मध्य प्रदेश शासन',
-              'Rewa Municipal Corporation • Govt. of Madhya Pradesh'
-            )}
-          </span>
-          <h1 style={{ fontSize: '2.1rem', fontWeight: 900, color: '#0b3a6d', marginBottom: '0.4rem' }}>
+          <div style={{ marginBottom: '0.5rem' }}>
+            <CivicPrototypeBadge />
+          </div>
+          <h1 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.1rem)', fontWeight: 800, color: 'var(--gov-navy)', marginBottom: '0.4rem' }}>
             {bilingual('रीवा सहायक AI — पोर्टल परिचय', 'About Rewa Sahayak AI Portal')}
           </h1>
-          <p style={{ color: '#475569', fontSize: '1rem' }}>
+          <p style={{ color: '#526273', fontSize: '0.98rem', maxWidth: '640px', margin: '0 auto' }}>
             {bilingual(
-              'स्मार्ट सिटी रीवा 2030 • नागरिक सेवा एवं त्वरित जन-शिकायत निवारण ई-प्रणाली',
-              'Smart City Rewa 2030 • AI-Powered Civic Grievance Redressal System'
+              'स्मार्ट सिटी रीवा नवाचार • नागरिक जन-शिकायत निवारण एवं पारदर्शी ई-प्रणाली प्रोटोटाइप',
+              'Smart City Rewa Innovation • Citizen Civic Grievance Redressal Platform Prototype'
             )}
           </p>
         </div>

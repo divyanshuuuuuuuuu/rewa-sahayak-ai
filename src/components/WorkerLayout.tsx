@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getMyNotifications } from "../services/workerService";
-import { AshokaEmblem } from "./Emblem";
+import { CivicInsignia } from "./Emblem";
 
 import { DEPARTMENT_METADATA } from "../services/departmentAccountService";
 
@@ -56,9 +56,14 @@ export default function WorkerLayout() {
 
   return (
     <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", background: "#f0f4f8" }}>
+      {/* Accessible Skip Link */}
+      <a href="#worker-main" className="skip-link">
+        Skip to main content
+      </a>
+
       {/* ─── Mobile Top Header ─────────────────────────────────────── */}
       <header style={{
-        background: "linear-gradient(90deg, #061a30, #0b3a6d)",
+        background: "linear-gradient(90deg, #0D223B, #17365D)",
         padding: "0.75rem 1rem",
         display: "flex",
         alignItems: "center",
@@ -66,10 +71,10 @@ export default function WorkerLayout() {
         position: "sticky",
         top: 0,
         zIndex: 100,
-        boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", minWidth: 0 }}>
-          <AshokaEmblem size={32} />
+          <CivicInsignia size={32} />
           <div style={{ minWidth: 0 }}>
             <div style={{
               color: "#fff",
@@ -393,7 +398,7 @@ export default function WorkerLayout() {
       )}
 
       {/* ─── Main Content ─────────────────────────────────────────── */}
-      <main style={{ flex: 1, overflowY: "auto", paddingBottom: "5.5rem" }}>
+      <main id="worker-main" tabIndex={-1} style={{ flex: 1, overflowY: "auto", paddingBottom: "5.5rem", outline: "none" }}>
         <Outlet />
       </main>
 

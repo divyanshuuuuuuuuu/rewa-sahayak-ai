@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { HardHat, Mail, Building2, Phone, LogOut, Shield } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { getMyWorkerProfile, type WorkerProfile } from "../../services/workerService";
-import { AshokaEmblem } from "../../components/Emblem";
+import { CivicInsignia } from "../../components/Emblem";
 
 export default function WorkerProfile() {
   const { user, profile, signOut } = useAuth();
@@ -164,10 +164,10 @@ export default function WorkerProfile() {
         border: "1px solid #e2e8f0",
         boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
       }}>
-        <AshokaEmblem size={36} />
+        <CivicInsignia size={36} />
         <div>
-          <div style={{ fontWeight: 700, color: "#0b3a6d", fontSize: "0.82rem" }}>Rewa Municipal Corporation</div>
-          <div style={{ color: "#64748b", fontSize: "0.72rem" }}>Rewa Sahayak AI — Field Worker Portal</div>
+          <div style={{ fontWeight: 700, color: "var(--gov-navy)", fontSize: "0.82rem" }}>Rewa Sahayak AI</div>
+          <div style={{ color: "var(--text-secondary)", fontSize: "0.72rem" }}>Field Worker Operations Portal (Prototype)</div>
         </div>
       </div>
 
@@ -177,6 +177,7 @@ export default function WorkerProfile() {
         onClick={handleSignOut}
         style={{
           width: "100%",
+          minHeight: 46,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",

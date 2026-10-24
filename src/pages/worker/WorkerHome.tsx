@@ -132,7 +132,7 @@ function AssignmentCard({ assignment }: { assignment: WorkerAssignment }) {
       <div style={{ padding: "0.85rem 1rem 1rem", flex: 1, display: "flex", flexDirection: "column" }}>
         {/* Reference & Priority */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.3rem" }}>
-          <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#0b3a6d" }}>
+          <span className="ticket-badge" style={{ color: "var(--gov-navy)", background: "#eef4fb", padding: "1px 6px", borderRadius: 4 }}>
             #{assignment.reference_number}
           </span>
           {assignment.severity === "HIGH" && (
@@ -187,15 +187,17 @@ function AssignmentCard({ assignment }: { assignment: WorkerAssignment }) {
             alignItems: "center",
             justifyContent: "center",
             gap: "0.4rem",
-            background: isResolved ? "#f0fdf4" : "linear-gradient(135deg, #0b3a6d, #1d4ed8)",
+            background: isResolved ? "#f0fdf4" : "var(--gov-navy)",
             color: isResolved ? "#15803d" : "#fff",
             border: isResolved ? "1.5px solid #86efac" : "none",
-            borderRadius: 10,
+            borderRadius: 8,
             padding: "0.65rem 1rem",
+            minHeight: "44px",
             fontWeight: 700,
             fontSize: "0.84rem",
             textDecoration: "none",
             width: "100%",
+            boxShadow: isResolved ? "none" : "0 2px 6px rgba(23,54,93,0.15)",
           }}
         >
           {isResolved ? "View Resolution Proof" : "View Details & Action"}

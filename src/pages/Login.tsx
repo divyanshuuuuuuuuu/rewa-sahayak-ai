@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Shield, User, Eye, EyeOff, Mail, Lock, UserPlus, KeyRound, LogOut } from "lucide-react";
-import { AshokaEmblem, RewaMunicipalLogo } from "../components/Emblem";
+import { CivicInsignia } from "../components/Emblem";
 import { useGov } from "../context/GovContext";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../services/supabase";
@@ -102,14 +102,13 @@ export default function Login() {
     <div className="login-page fade-in" style={{ padding: "2.5rem 1rem" }}>
       <div className="card login-card" style={{ textAlign: "center", maxWidth: 440, margin: "0 auto" }}>
         <div style={{ marginBottom: "1.5rem" }}>
-          <div style={{ display: "flex", justifyContent: "center", gap: "0.75rem", alignItems: "center", marginBottom: "0.75rem" }}>
-            <AshokaEmblem size={44} />
-            <RewaMunicipalLogo size={44} />
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "0.75rem" }}>
+            <CivicInsignia size={54} />
           </div>
           <span className="gov-seal-badge" style={{ marginBottom: "0.5rem" }}>
-            {bilingual("नगर पालिक निगम, रीवा", "Rewa Municipal Corporation")}
+            {bilingual("रीवा सहायक AI • नागरिक व प्रशासनिक लॉगिन", "Rewa Sahayak AI • Civic Portal Access")}
           </span>
-          <h1 style={{ fontSize: "1.35rem", fontWeight: 900, color: "#0b3a6d", marginBottom: "0.2rem" }}>
+          <h1 style={{ fontSize: "1.35rem", fontWeight: 800, color: "var(--gov-navy)", marginBottom: "0.2rem" }}>
             {bilingual("ई-पोर्टल लॉगिन", "Civic Portal Login")}
           </h1>
           <p style={{ color: "#64748b", fontSize: "0.82rem" }}>

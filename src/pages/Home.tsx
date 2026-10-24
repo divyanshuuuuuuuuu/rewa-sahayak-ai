@@ -35,13 +35,13 @@ export default function Home() {
       <section className="hero">
         <div className="container hero-content">
           
-          {/* Government Badge */}
-          <div className="hero-badge">
+          {/* Civic Innovation Prototype Badge */}
+          <div className="hero-badge" role="status">
             <ShieldCheck size={16} color="#0369a1" />
             <span>
               {bilingual(
-                'मध्य प्रदेश शासन • नगर पालिक निगम रीवा आधिकारिक पोर्टल',
-                'Govt. of Madhya Pradesh • Rewa Municipal Corporation Portal'
+                'रीवा सहायक AI • नागरिक जन-सेवा नवाचार प्रोटोटाइप (iComputex 2026)',
+                'Rewa Sahayak AI • Civic Redressal Innovation Prototype (iComputex 2026)'
               )}
             </span>
           </div>
@@ -67,18 +67,19 @@ export default function Home() {
 
           {/* Quick Ticket Tracking Bar */}
           <div style={{ maxWidth: '540px', margin: '0 auto 2rem' }}>
-            <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '0.5rem', background: '#ffffff', padding: '0.4rem', borderRadius: '10px', border: '2px solid #0b3a6d', boxShadow: '0 4px 12px rgba(11,58,109,0.1)' }}>
+            <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '0.5rem', background: '#ffffff', padding: '0.4rem', borderRadius: '10px', border: '2px solid var(--gov-navy)', boxShadow: '0 4px 12px rgba(23,54,93,0.1)' }}>
               <input
                 type="text"
+                aria-label={bilingual('शिकायत क्रमांक द्वारा खोजें', 'Search by ticket number')}
                 placeholder={bilingual(
                   'शिकायत क्रमांक दर्ज करें (उदा. REWA-2026-000001)',
                   'Enter ticket number (e.g. REWA-2026-000001)'
                 )}
                 value={searchTicket}
                 onChange={(e) => setSearchTicket(e.target.value)}
-                style={{ flex: 1, border: 'none', padding: '0.6rem 0.9rem', fontSize: '0.9rem', outline: 'none' }}
+                style={{ flex: 1, border: 'none', padding: '0.65rem 0.9rem', fontSize: '0.9rem', outline: 'none', minWidth: 0 }}
               />
-              <button type="submit" className="btn btn-primary btn-sm" style={{ padding: '0.6rem 1.25rem' }}>
+              <button type="submit" className="btn btn-primary btn-sm" style={{ padding: '0.6rem 1.25rem', flexShrink: 0 }}>
                 <Search size={15} />
                 <span>{bilingual('स्थिति देखें', 'Track Status')}</span>
               </button>
@@ -87,7 +88,7 @@ export default function Home() {
 
           {/* Call to Actions */}
           <div className="hero-actions">
-            <Link to="/report" className="btn btn-primary btn-lg" style={{ background: '#e65100', borderColor: '#c2410c' }}>
+            <Link to="/report" className="btn btn-saffron btn-lg">
               <Sparkles size={18} />
               <span>{bilingual('1-टैप में शिकायत दर्ज करें', 'Lodge Complaint (1-Tap)')}</span>
               <ArrowRight size={18} />
@@ -98,31 +99,31 @@ export default function Home() {
             </Link>
           </div>
 
-          {/* Official 5-Step Resolution Workflow */}
-          <div className="hero-visual">
+          {/* 5-Step Resolution Workflow */}
+          <div className="hero-visual" role="region" aria-label="Resolution workflow">
             <div className="hero-step">
-              <span className="hero-step-icon">👤</span>
+              <span className="hero-step-icon" aria-hidden="true">👤</span>
               <span className="hero-step-label">{bilingual('1. नागरिक रिपोर्ट', '1. Citizen Input')}</span>
             </div>
-            <span className="hero-arrow"><ChevronRight /></span>
+            <span className="hero-arrow" aria-hidden="true"><ChevronRight /></span>
             <div className="hero-step">
-              <span className="hero-step-icon">🤖</span>
+              <span className="hero-step-icon" aria-hidden="true">🤖</span>
               <span className="hero-step-label">{bilingual('2. AI ऑटो वर्गीकरण', '2. AI Auto Routing')}</span>
             </div>
-            <span className="hero-arrow"><ChevronRight /></span>
+            <span className="hero-arrow" aria-hidden="true"><ChevronRight /></span>
             <div className="hero-step">
-              <span className="hero-step-icon">📋</span>
+              <span className="hero-step-icon" aria-hidden="true">📋</span>
               <span className="hero-step-label">{bilingual('3. आधिकारिक पावती', '3. E-Receipt Issued')}</span>
             </div>
-            <span className="hero-arrow"><ChevronRight /></span>
+            <span className="hero-arrow" aria-hidden="true"><ChevronRight /></span>
             <div className="hero-step">
-              <span className="hero-step-icon">🏛️</span>
+              <span className="hero-step-icon" aria-hidden="true">🏛️</span>
               <span className="hero-step-label">{bilingual('4. नगर निगम कार्रवाई', '4. Field Dispatch')}</span>
             </div>
-            <span className="hero-arrow"><ChevronRight /></span>
-            <div className="hero-step" style={{ border: '2px solid #15803d' }}>
-              <span className="hero-step-icon">✅</span>
-              <span className="hero-step-label" style={{ color: '#15803d' }}>
+            <span className="hero-arrow" aria-hidden="true"><ChevronRight /></span>
+            <div className="hero-step" style={{ border: '2px solid var(--gov-green)' }}>
+              <span className="hero-step-icon" aria-hidden="true">✅</span>
+              <span className="hero-step-label" style={{ color: 'var(--gov-green)' }}>
                 {bilingual('5. 48 घंटे में समाधान', '5. 48hr Resolution')}
               </span>
             </div>

@@ -14,7 +14,7 @@ import { uploadReportImage, getImageUrl } from '../services/supabaseStore';
 import { getCivicEvidenceSvg, getCivicVideoPosterSvg, createSampleCivicVideoBlob } from '../services/evidenceSvg';
 import type { AIAnalysis, CivicMedia, Category } from '../types';
 import MapView from '../components/MapView';
-import { AshokaEmblem, RewaMunicipalLogo } from '../components/Emblem';
+import { CivicInsignia, CivicPrototypeBadge } from '../components/Emblem';
 import { useGov } from '../context/GovContext';
 import { reverseGeocode, forwardGeocode } from '../services/geocode';
 
@@ -991,16 +991,18 @@ export default function Report() {
         
         {/* Official Civic Header */}
         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.6rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <CivicInsignia size={30} />
             <span className="gov-seal-badge">
-              <ShieldCheck size={14} color="#0b3a6d" />
-              {bilingual('रीवा नगर निगम — जन-शिकायत पंजीकरण', 'Rewa Municipal Corporation — Grievance Redressal')}
+              <ShieldCheck size={14} color="var(--gov-navy)" />
+              {bilingual('रीवा सहायक AI — नागरिक शिकायत पंजीकरण', 'Rewa Sahayak AI — Civic Grievance Lodging')}
             </span>
+            <CivicPrototypeBadge />
           </div>
-          <h1 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.1rem)', fontWeight: 900, color: '#0b3a6d', marginBottom: '0.35rem' }}>
+          <h1 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.1rem)', fontWeight: 900, color: 'var(--gov-navy)', marginBottom: '0.35rem' }}>
             {bilingual('नागरिक शिकायत दर्ज करें', 'Lodge a Civic Complaint')}
           </h1>
-          <p style={{ color: '#475569', fontSize: '0.92rem' }}>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem', maxWidth: 640, margin: '0 auto' }}>
             {bilingual(
               'टाइप करने की जरूरत नहीं — 1-टैप में बोलें, फोटो लें या नीचे दी गई समस्या चुनें',
               'No typing required — Speak, snap a photo, or choose from common civic issues below'
@@ -1737,14 +1739,14 @@ export default function Report() {
           <div className="fade-in">
             <div className="gov-receipt-card">
               {/* Receipt Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #0b3a6d', paddingBottom: '1rem', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #0b3a6d', paddingBottom: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <AshokaEmblem size={44} />
+                  <CivicInsignia size={44} />
                   <div>
-                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0b3a6d', margin: 0 }}>
-                      {bilingual('नगर पालिक निगम, रीवा', 'Rewa Municipal Corporation')}
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--gov-navy)', margin: 0 }}>
+                      {bilingual('रीवा सहायक AI — नागरिक सेवा', 'Rewa Sahayak AI — Civic Grievance')}
                     </h3>
-                    <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
                       {bilingual(
                         'ई-शिकायत पावती / Civic Grievance E-Acknowledgment',
                         'Civic Grievance E-Acknowledgment Slip'
@@ -1752,7 +1754,7 @@ export default function Report() {
                     </p>
                   </div>
                 </div>
-                <RewaMunicipalLogo size={44} />
+                <CivicPrototypeBadge />
               </div>
 
               {/* Status Ribbon */}

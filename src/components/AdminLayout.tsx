@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useGov } from "../context/GovContext";
-import { AshokaEmblem, RewaMunicipalLogo } from "./Emblem";
+import { CivicInsignia } from "./Emblem";
 import { syncFromSupabase } from "../services/store";
 
 export default function AdminLayout() {
@@ -72,7 +72,7 @@ export default function AdminLayout() {
         {/* Brand Header */}
         <div style={{ padding: "1.25rem 1.25rem 1rem", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
-            <AshokaEmblem size={36} />
+            <CivicInsignia size={36} />
             <div>
               <div style={{ fontSize: "0.95rem", fontWeight: 900, letterSpacing: "-0.01em", color: "#f8fafc" }}>
                 REWA COMMAND

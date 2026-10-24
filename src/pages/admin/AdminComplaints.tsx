@@ -97,7 +97,8 @@ export default function AdminComplaints() {
           </select>
         </div>
 
-        <div className="table-container">
+        {/* Desktop Data Table */}
+        <div className="table-container table-desktop-only">
           <table>
             <thead>
               <tr>
@@ -123,23 +124,71 @@ export default function AdminComplaints() {
               ) : (
                 complaints.map(c => (
                   <tr key={c.id}>
-                    <td style={{ fontWeight: 800, color: '#0b3a6d', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{c.ticket_number}</td>
+                    <td className="ticket-badge" style={{ color: 'var(--gov-navy)', whiteSpace: 'nowrap' }}>{c.ticket_number}</td>
                     <td style={{ maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{c.title}</td>
                     <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{categoryIcons[c.category]} {categoryLabel(c.category)}</td>
                     <td><span className="badge" style={{ background: `${moduleColors[c.module]}22`, color: moduleColors[c.module] }}>{moduleLabel(c.module)}</span></td>
                     <td><span className="badge" style={{ background: `${severityColors[c.severity]}22`, color: severityColors[c.severity] }}>{c.severity}</span></td>
                     <td style={{ fontSize: '0.8rem', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.address || '—'}</td>
-                    <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap', fontWeight: 600, color: c.assigned_to ? '#0b3a6d' : '#94a3b8' }}>
+                    <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap', fontWeight: 600, color: c.assigned_to ? 'var(--gov-navy)' : '#94a3b8' }}>
                       {c.assigned_to ? `👷 ${c.assigned_to}` : '—'}
                     </td>
                     <td><span className="badge" style={{ background: `${statusColors[c.status]}22`, color: statusColors[c.status] }}>● {statusLabel(c.status)}</span></td>
                     <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{formatDate(c.created_at)}</td>
-                    <td><Link to={`/admin/complaints/${c.id}`} className="btn btn-primary btn-sm" style={{ padding: '0.2rem 0.6rem' }}>{bilingual('प्रबंधन', 'Manage')}</Link></td>
+                    <td><Link to={`/admin/complaints/${c.id}`} className="btn btn-primary btn-sm" style={{ padding: '0.25rem 0.65rem' }}>{bilingual('प्रबंधन', 'Manage')}</Link></td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Responsive Cards */}
+        <div className="table-mobile-cards">
+          {complaints.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">📭</div>
+              <p style={{ color: '#64748b', margin: 0 }}>
+                {bilingual('कोई शिकायत उपलब्ध नहीं है।', 'No complaints match filters.')}
+              </p>
+            </div>
+          ) : (
+            complaints.map(c => (
+              <div key={c.id} className="card" style={{ padding: '1rem', borderLeft: `4px solid ${statusColors[c.status] || 'var(--gov-navy)'}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                  <span className="ticket-badge" style={{ color: 'var(--gov-navy)', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>
+                    {c.ticket_number}
+                  </span>
+                  <span className="badge" style={{ background: `${statusColors[c.status]}20`, color: statusColors[c.status] }}>
+                    ● {statusLabel(c.status)}
+                  </span>
+                </div>
+
+                <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.94rem', marginBottom: '0.35rem', lineHeight: 1.35 }}>
+                  {c.title}
+                </div>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.78rem', color: '#64748b' }}>
+                  <span>{categoryIcons[c.category]} {categoryLabel(c.category)}</span>
+                  <span>•</span>
+                  <span>{c.address || 'Rewa'}</span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.5rem', borderTop: '1px solid #f1f5f9', marginTop: '0.4rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                    {c.assigned_to ? <span>👷 {c.assigned_to}</span> : <span style={{ color: '#94a3b8' }}>Unassigned</span>}
+                  </div>
+                  <Link
+                    to={`/admin/complaints/${c.id}`}
+                    className="btn btn-primary btn-sm"
+                    style={{ padding: '0.35rem 0.85rem' }}
+                  >
+                    {bilingual('प्रबंधन करें →', 'Manage Task →')}
+                  </Link>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

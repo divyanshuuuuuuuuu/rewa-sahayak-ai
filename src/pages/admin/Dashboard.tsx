@@ -27,7 +27,7 @@ import {
 import { getStats, getAllComplaints, syncFromSupabase } from '../../services/store';
 import { getDepartmentWorkers } from '../../services/whatsappService';
 import { statusLabels, statusColors, moduleNames, moduleColors, categoryIcons, severityColors } from '../../services/ai';
-import { AshokaEmblem } from '../../components/Emblem';
+import { CivicInsignia, CivicPrototypeBadge } from '../../components/Emblem';
 import { useGov } from '../../context/GovContext';
 import {
   getDepartmentAccounts,
@@ -235,14 +235,18 @@ export default function AdminDashboard() {
         {/* Government Admin Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
-            <span className="gov-seal-badge" style={{ marginBottom: '0.35rem' }}>
-              <ShieldCheck size={14} color="#0b3a6d" />
-              {lang === 'hi' ? 'रीवा नगर पालिक निगम — प्रशासनिक निगरानी प्रकोष्ठ' : 'Rewa Nagar Nigam — Administrative Monitoring'}
-            </span>
-            <h1 style={{ fontSize: '1.85rem', fontWeight: 900, color: '#0b3a6d', margin: 0 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.45rem', flexWrap: 'wrap' }}>
+              <CivicInsignia size={26} />
+              <span className="gov-seal-badge">
+                <ShieldCheck size={14} color="var(--gov-navy)" />
+                {lang === 'hi' ? 'रीवा सहायक AI — प्रशासनिक निगरानी' : 'Rewa Sahayak AI — Administrative Center'}
+              </span>
+              <CivicPrototypeBadge />
+            </div>
+            <h1 style={{ fontSize: '1.85rem', fontWeight: 900, color: 'var(--gov-navy)', margin: 0 }}>
               {lang === 'hi' ? 'प्रशासनिक डैशबोर्ड' : 'Administrative Dashboard'}
             </h1>
-            <p style={{ color: '#475569', fontSize: '0.9rem', marginTop: '0.2rem' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.2rem' }}>
               {lang === 'hi'
                 ? 'रीवा शहर जन-शिकायत निवारण एवं समाधान नियंत्रण कक्ष'
                 : 'Rewa City Civic Grievance Monitoring & Resolution Center'}

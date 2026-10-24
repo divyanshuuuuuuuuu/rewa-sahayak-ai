@@ -3,7 +3,7 @@ import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Eye, EyeOff, Mail, Lock, HardHat, ArrowLeft } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../services/supabase";
-import { AshokaEmblem } from "../components/Emblem";
+import { CivicInsignia, CivicPrototypeBadge } from "../components/Emblem";
 
 export default function WorkerLogin() {
   const navigate = useNavigate();
@@ -142,11 +142,11 @@ export default function WorkerLogin() {
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: "1.75rem" }}>
           <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem" }}>
-            <AshokaEmblem size={44} />
+            <CivicInsignia size={44} />
             <div style={{
               width: 44,
               height: 44,
-              background: "linear-gradient(135deg, #0b3a6d, #1d4ed8)",
+              background: "linear-gradient(135deg, var(--gov-navy), var(--gov-navy-light))",
               borderRadius: "50%",
               display: "flex",
               alignItems: "center",
@@ -156,24 +156,11 @@ export default function WorkerLogin() {
             </div>
           </div>
 
-          <div style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.35rem",
-            background: "#eff6ff",
-            border: "1px solid #bfdbfe",
-            borderRadius: 20,
-            padding: "0.25rem 0.75rem",
-            fontSize: "0.72rem",
-            fontWeight: 700,
-            color: "#1e40af",
-            marginBottom: "0.6rem",
-          }}>
-            <span>🏛️</span>
-            <span>Rewa Municipal Corporation</span>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.6rem" }}>
+            <CivicPrototypeBadge />
           </div>
 
-          <h1 style={{ fontSize: "1.35rem", fontWeight: 900, color: "#0b3a6d", marginBottom: "0.25rem" }}>
+          <h1 style={{ fontSize: "1.35rem", fontWeight: 900, color: "var(--gov-navy)", marginBottom: "0.25rem" }}>
             Department & Worker Portal
           </h1>
           <p style={{ color: "#64748b", fontSize: "0.82rem" }}>
