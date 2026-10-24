@@ -137,9 +137,28 @@ function CompletionCard({ assignment }: { assignment: WorkerAssignment }) {
 
         {/* Completion timestamp */}
         {assignment.resolved_at && (
-          <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.72rem", color: "#64748b", marginBottom: "0.75rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.72rem", color: "#64748b", marginBottom: "0.6rem" }}>
             <Calendar size={12} />
             Completed: {formatDate(assignment.resolved_at)}
+          </div>
+        )}
+
+        {assignment.removed_from_website && (
+          <div style={{
+            background: "#f8fafc",
+            border: "1px solid #cbd5e1",
+            borderRadius: 6,
+            padding: "0.25rem 0.5rem",
+            fontSize: "0.7rem",
+            color: "#475569",
+            fontWeight: 600,
+            marginBottom: "0.65rem",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.3rem"
+          }}>
+            <span>📦</span>
+            <span>सार्वजनिक वेबसाइट से संग्रहीत • आपके कार्य स्कोर में सुरक्षित (Counted in Worker Record)</span>
           </div>
         )}
 

@@ -68,7 +68,7 @@ export default function Complaints() {
   const formatDate = (d: string) => new Date(d).toLocaleDateString(lang === "hi" ? "hi-IN" : "en-IN", { day: "numeric", month: "short", year: "numeric" });
 
   const displayed = useMemo(() => {
-    let list = reports;
+    let list = reports.filter(r => !r.removed_from_website);
     if (viewMode === "mine" && search) {
       const q = search.toLowerCase();
       list = list.filter(r => r.title.toLowerCase().includes(q) || r.reference_number.toLowerCase().includes(q) || r.location_description?.toLowerCase().includes(q));

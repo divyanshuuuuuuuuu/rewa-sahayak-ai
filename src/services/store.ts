@@ -79,6 +79,9 @@ export function dbReportToComplaint(r: any, history: any[] = []): Complaint {
     delay_reason: r.delay_reason || null,
     work_duration_seconds: r.work_duration_seconds || null,
     worker_resolution_location: r.worker_resolution_location || null,
+    removed_from_website: !!r.removed_from_website,
+    removal_reason: r.removal_reason || null,
+    removed_by_admin_at: r.removed_by_admin_at || null,
     updates,
   };
 }
@@ -173,12 +176,110 @@ export function getAllComplaints(): Complaint[] {
   return sortComplaints(memoryComplaints);
 }
 
+export function getPublicComplaints(): Complaint[] {
+  return getAllComplaints().filter(c => !c.removed_from_website);
+}
+
 export function getComplaintById(id: string): Complaint | undefined {
   const list = getAllComplaints();
   const searchId = id.trim().toLowerCase();
   return list.find(
     c => c.id.toLowerCase() === searchId || c.ticket_number.toLowerCase() === searchId
   );
+}
+
+export async function adminRemoveComplaintFromWebsite(
+  complaintId: string,
+  reason?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const now = new Date().toISOString();
+    const reasonClean = reason?.trim() || 'प्रशासनिक आदेश द्वारा सार्वजनिक पोर्टल से हटाई गई (Preserved for worker record)';
+
+    // 1. Update in-memory and local storage
+    const list = getAllComplaints();
+    const target = list.find(c => c.id === complaintId || c.ticket_number === complaintId);
+    if (target) {
+      target.removed_from_website = true;
+      target.removal_reason = reasonClean;
+      target.removed_by_admin_at = now;
+      target.updates.push({
+        id: uuidv4(),
+        complaint_id: target.id,
+        status: target.status,
+        note: `[प्रशासनिक कार्रवाई] शिकायत को सार्वजनिक वेबसाइट से हटाया गया। यह फील्ड वर्कर के कार्य रिकॉर्ड में सुरक्षित रहेगी। (कारण: ${reasonClean})`,
+        updated_by: 'Super Admin',
+        created_at: now,
+      });
+      saveComplaintsToStorage(list);
+    }
+
+    // 2. Update Supabase
+    await supabase
+      .from('citizen_reports')
+      .update({
+        removed_from_website: true,
+        removal_reason: reasonClean,
+        removed_by_admin_at: now,
+        public_visibility: false,
+      })
+      .eq('id', target?.id || complaintId);
+
+    // 3. Status history entry
+    if (target) {
+      await supabase.from('report_status_history').insert({
+        report_id: target.id,
+        previous_status: target.status,
+        new_status: target.status,
+        internal_note: `Complaint hidden from public website by admin. Reason: ${reasonClean}. Preserved in worker dashboard.`,
+        public_message: 'शिकायत प्रशासनिक समीक्षा उपरांत सार्वजनिक पोर्टल से संग्रहीत कर ली गई है।',
+        changed_by_name: 'Super Admin',
+      });
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to remove complaint' };
+  }
+}
+
+export async function adminRestoreComplaintToWebsite(
+  complaintId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const now = new Date().toISOString();
+
+    const list = getAllComplaints();
+    const target = list.find(c => c.id === complaintId || c.ticket_number === complaintId);
+    if (target) {
+      target.removed_from_website = false;
+      target.removal_reason = null;
+      target.removed_by_admin_at = null;
+      target.updates.push({
+        id: uuidv4(),
+        complaint_id: target.id,
+        status: target.status,
+        note: '[प्रशासनिक कार्रवाई] शिकायत को पुनः सार्वजनिक वेबसाइट पर बहाल किया गया।',
+        updated_by: 'Super Admin',
+        created_at: now,
+      });
+      saveComplaintsToStorage(list);
+    }
+
+    await supabase
+      .from('citizen_reports')
+      .update({
+        removed_from_website: false,
+        removal_reason: null,
+        removed_by_admin_at: null,
+        public_visibility: true,
+      })
+      .eq('id', target?.id || complaintId);
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to restore complaint' };
+  }
 }
 
 export function getComplaintsByModule(module: string): Complaint[] {

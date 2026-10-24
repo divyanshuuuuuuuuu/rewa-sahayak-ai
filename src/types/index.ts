@@ -60,6 +60,9 @@ export interface Complaint {
   delay_reason?: string | null;
   work_duration_seconds?: number | null;
   worker_resolution_location?: { latitude: number; longitude: number; accuracy?: number; timestamp?: string } | null;
+  removed_from_website?: boolean | null;
+  removal_reason?: string | null;
+  removed_by_admin_at?: string | null;
   updates: ComplaintUpdate[];
 }
 

@@ -92,6 +92,35 @@ export default function ComplaintDetail() {
     );
   }
 
+  if (complaint.removed_from_website) {
+    return (
+      <div className="page">
+        <div className="container">
+          <div className="empty-state" style={{ maxWidth: 520, margin: '3rem auto', background: '#fff', padding: '2rem', borderRadius: 16, border: '1.5px solid #e2e8f0', boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+            <div className="empty-state-icon">🚫</div>
+            <h3 style={{ color: '#991b1b', fontWeight: 800, marginBottom: '0.4rem' }}>
+              {bilingual('शिकायत सार्वजनिक वेबसाइट से हटाई गई है', 'Complaint Removed From Public Portal')}
+            </h3>
+            <p style={{ color: '#475569', fontSize: '0.9rem', lineHeight: 1.55 }}>
+              {bilingual(
+                'यह शिकायत प्रशासनिक समीक्षा उपरांत सार्वजनिक वेबसाइट से हटा दी गई है। फील्ड रिकॉर्ड एवं विभागीय साक्ष्य आंतरिक अभिलेखागार में सुरक्षित हैं।',
+                'This complaint has been removed from the public website by the municipal administration. Field and worker records remain securely preserved.'
+              )}
+            </p>
+            {complaint.removal_reason && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '0.65rem', margin: '0.85rem 0', color: '#991b1b', fontSize: '0.82rem', textAlign: 'left' }}>
+                <strong>{bilingual('प्रशासनिक कारण:', 'Admin Reason:')}</strong> "{complaint.removal_reason}"
+              </div>
+            )}
+            <Link to="/complaints" className="btn btn-primary" style={{ marginTop: '0.75rem' }}>
+              {bilingual('← सभी सार्वजनिक शिकायतें देखें', '← View Public Complaints')}
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const formatDateTime = (d: string) => {
     const date = new Date(d);
     return date.toLocaleString(lang === 'hi' ? 'hi-IN' : 'en-IN', {

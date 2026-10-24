@@ -31,6 +31,8 @@ export interface DbReport {
   delay_reason: string | null;
   resolution_note: string | null;
   resolved_at: string | null;
+  removed_from_website?: boolean | null;
+  removal_reason?: string | null;
   submitted_at: string;
   updated_at: string;
 }
@@ -171,8 +173,8 @@ export async function getPublicReports(options?: {
 
   const { data, error, count } = await query;
   if (error) return { reports: [], total: 0, error: error.message };
-  const rawReports = (data as DbReport[]) ?? [];
-  return { reports: sortDbReports(rawReports), total: count ?? 0, error: null };
+  const rawReports = ((data as DbReport[]) ?? []).filter(r => !r.removed_from_website);
+  return { reports: sortDbReports(rawReports), total: rawReports.length, error: null };
 }
 
 // ─── Fetch citizen's own reports ─────────────────────────────────────────────
@@ -187,7 +189,7 @@ export async function getMyCitizenReports(): Promise<{ reports: DbReport[]; erro
     .order("submitted_at", { ascending: false });
 
   if (error) return { reports: [], error: error.message };
-  const rawReports = (data as DbReport[]) ?? [];
+  const rawReports = ((data as DbReport[]) ?? []).filter(r => !r.removed_from_website);
   return { reports: sortDbReports(rawReports), error: null };
 }
 

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, MapPin } from 'lucide-react';
-import { getAllComplaints, syncFromSupabase } from '../../services/store';
+import { Search, MapPin, Eye, EyeOff } from 'lucide-react';
+import { getAllComplaints, syncFromSupabase, adminRemoveComplaintFromWebsite, adminRestoreComplaintToWebsite } from '../../services/store';
 import { statusColors, severityColors, moduleColors, categoryIcons } from '../../services/ai';
 import { useGov } from '../../context/GovContext';
 
@@ -12,6 +12,7 @@ export default function AdminComplaints() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [moduleFilter, setModuleFilter] = useState('');
   const [severityFilter, setSeverityFilter] = useState('');
+  const [visibilityFilter, setVisibilityFilter] = useState('');
   const [search, setSearch] = useState('');
 
   useEffect(() => {
@@ -27,6 +28,8 @@ export default function AdminComplaints() {
     if (statusFilter) list = list.filter(c => c.status === statusFilter);
     if (categoryFilter) list = list.filter(c => c.category === categoryFilter);
     if (severityFilter) list = list.filter(c => c.severity === severityFilter);
+    if (visibilityFilter === 'live') list = list.filter(c => !c.removed_from_website);
+    if (visibilityFilter === 'removed') list = list.filter(c => !!c.removed_from_website);
     if (search) {
       const q = search.toLowerCase();
       list = list.filter(c => c.title.toLowerCase().includes(q) || c.ticket_number.toLowerCase().includes(q) || c.address.toLowerCase().includes(q) || c.description.toLowerCase().includes(q));
@@ -39,7 +42,7 @@ export default function AdminComplaints() {
       if (!aIsSubmitted && bIsSubmitted) return -1; // non-SUBMITTED stays at top
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
-  }, [allComplaints, moduleFilter, statusFilter, categoryFilter, severityFilter, search]);
+  }, [allComplaints, moduleFilter, statusFilter, categoryFilter, severityFilter, visibilityFilter, search]);
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', {
@@ -95,6 +98,11 @@ export default function AdminComplaints() {
             <option value="">{bilingual('सभी श्रेणियां', 'All Categories')}</option>
             {Object.keys(categoryIcons).map(c => <option key={c} value={c}>{categoryLabel(c)}</option>)}
           </select>
+          <select className="filter-select" value={visibilityFilter} onChange={(e) => setVisibilityFilter(e.target.value)}>
+            <option value="">{bilingual('वेबसाइट दृश्यता: सभी', 'Visibility: All')}</option>
+            <option value="live">🌐 {bilingual('सार्वजनिक लाइव', 'Live on Site')}</option>
+            <option value="removed">🚫 {bilingual('वेबसाइट से हटाई गई', 'Removed from Site')}</option>
+          </select>
         </div>
 
         {/* Desktop Data Table */}
@@ -125,7 +133,16 @@ export default function AdminComplaints() {
                 complaints.map(c => (
                   <tr key={c.id}>
                     <td className="ticket-badge" style={{ color: 'var(--gov-navy)', whiteSpace: 'nowrap' }}>{c.ticket_number}</td>
-                    <td style={{ maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{c.title}</td>
+                    <td style={{ maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                      <div>{c.title}</div>
+                      {c.removed_from_website && (
+                        <div style={{ marginTop: '2px' }}>
+                          <span style={{ fontSize: '0.66rem', background: '#fee2e2', color: '#991b1b', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>
+                            🚫 वेबसाइट से हटाई गई (Worker Preserved)
+                          </span>
+                        </div>
+                      )}
+                    </td>
                     <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{categoryIcons[c.category]} {categoryLabel(c.category)}</td>
                     <td><span className="badge" style={{ background: `${moduleColors[c.module]}22`, color: moduleColors[c.module] }}>{moduleLabel(c.module)}</span></td>
                     <td><span className="badge" style={{ background: `${severityColors[c.severity]}22`, color: severityColors[c.severity] }}>{c.severity}</span></td>
@@ -135,7 +152,42 @@ export default function AdminComplaints() {
                     </td>
                     <td><span className="badge" style={{ background: `${statusColors[c.status]}22`, color: statusColors[c.status] }}>● {statusLabel(c.status)}</span></td>
                     <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{formatDate(c.created_at)}</td>
-                    <td><Link to={`/admin/complaints/${c.id}`} className="btn btn-primary btn-sm" style={{ padding: '0.25rem 0.65rem' }}>{bilingual('प्रबंधन', 'Manage')}</Link></td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                        <Link to={`/admin/complaints/${c.id}`} className="btn btn-primary btn-sm" style={{ padding: '0.25rem 0.65rem' }}>{bilingual('प्रबंधन', 'Manage')}</Link>
+                        {c.removed_from_website ? (
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem', background: '#dcfce7', color: '#166534', border: '1px solid #86efac', fontWeight: 700 }}
+                            title="वेबसाइट पर पुनः बहाल करें"
+                            onClick={async () => {
+                              await adminRestoreComplaintToWebsite(c.id);
+                              await syncFromSupabase();
+                              setAllComplaints(getAllComplaints());
+                            }}
+                          >
+                            ↺ बहाल
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem', background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', fontWeight: 700 }}
+                            title="सार्वजनिक वेबसाइट से हटाएं (वर्कर डैशबोर्ड में सुरक्षित रहेगी)"
+                            onClick={async () => {
+                              if (confirm('क्या आप इस शिकायत को सार्वजनिक वेबसाइट से हटाना चाहते हैं? (फील्ड कर्मी के डैशबोर्ड में कार्य गणना व रिकॉर्ड 100% सुरक्षित रहेगा)')) {
+                                await adminRemoveComplaintFromWebsite(c.id);
+                                await syncFromSupabase();
+                                setAllComplaints(getAllComplaints());
+                              }
+                            }}
+                          >
+                            🗑️ हटाएं
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -155,10 +207,17 @@ export default function AdminComplaints() {
           ) : (
             complaints.map(c => (
               <div key={c.id} className="card" style={{ padding: '1rem', borderLeft: `4px solid ${statusColors[c.status] || 'var(--gov-navy)'}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.4rem' }}>
-                  <span className="ticket-badge" style={{ color: 'var(--gov-navy)', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>
-                    {c.ticket_number}
-                  </span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span className="ticket-badge" style={{ color: 'var(--gov-navy)', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>
+                      {c.ticket_number}
+                    </span>
+                    {c.removed_from_website && (
+                      <span style={{ fontSize: '0.66rem', background: '#fee2e2', color: '#991b1b', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>
+                        🚫 हटाई गई
+                      </span>
+                    )}
+                  </div>
                   <span className="badge" style={{ background: `${statusColors[c.status]}20`, color: statusColors[c.status] }}>
                     ● {statusLabel(c.status)}
                   </span>
@@ -182,13 +241,44 @@ export default function AdminComplaints() {
                   <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
                     {c.assigned_to ? <span>👷 {c.assigned_to}</span> : <span style={{ color: '#94a3b8' }}>Unassigned</span>}
                   </div>
-                  <Link
-                    to={`/admin/complaints/${c.id}`}
-                    className="btn btn-primary btn-sm"
-                    style={{ padding: '0.35rem 0.85rem' }}
-                  >
-                    {bilingual('प्रबंधन करें →', 'Manage Task →')}
-                  </Link>
+                  <div style={{ display: 'flex', gap: '0.35rem' }}>
+                    <Link
+                      to={`/admin/complaints/${c.id}`}
+                      className="btn btn-primary btn-sm"
+                      style={{ padding: '0.3rem 0.75rem' }}
+                    >
+                      {bilingual('प्रबंधन →', 'Manage →')}
+                    </Link>
+                    {c.removed_from_website ? (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        style={{ padding: '0.3rem 0.6rem', fontSize: '0.74rem', background: '#dcfce7', color: '#166534', border: '1px solid #86efac', fontWeight: 700 }}
+                        onClick={async () => {
+                          await adminRestoreComplaintToWebsite(c.id);
+                          await syncFromSupabase();
+                          setAllComplaints(getAllComplaints());
+                        }}
+                      >
+                        ↺ बहाल
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        style={{ padding: '0.3rem 0.6rem', fontSize: '0.74rem', background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', fontWeight: 700 }}
+                        onClick={async () => {
+                          if (confirm('क्या आप इस शिकायत को सार्वजनिक वेबसाइट से हटाना चाहते हैं? (फील्ड कर्मी के डैशबोर्ड में कार्य गणना व रिकॉर्ड सुरक्षित रहेगा)')) {
+                            await adminRemoveComplaintFromWebsite(c.id);
+                            await syncFromSupabase();
+                            setAllComplaints(getAllComplaints());
+                          }
+                        }}
+                      >
+                        🗑️ हटाएं
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))

@@ -1578,27 +1578,46 @@ export default function WorkerTaskDetail() {
             </button>
           )}
 
-          <Link
-            to={`/complaints/${assignment.id}`}
-            target="_blank"
-            style={{
+          {assignment.removed_from_website ? (
+            <div style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: "0.4rem",
-              background: "#ffffff",
-              color: "#0b3a6d",
-              border: "1px solid #bfdbfe",
+              background: "#f8fafc",
+              color: "#475569",
+              border: "1px solid #cbd5e1",
               borderRadius: 10,
               padding: "0.7rem",
-              fontSize: "0.84rem",
+              fontSize: "0.82rem",
               fontWeight: 700,
-              textDecoration: "none",
-            }}
-          >
-            <ExternalLink size={14} />
-            नागरिक सार्वजनिक पोर्टल पर देखें (View on Public Portal)
-          </Link>
+            }}>
+              <span>📦</span>
+              <span>सार्वजनिक वेबसाइट से संग्रहीत • आपके फील्ड कार्य रिकॉर्ड में सुरक्षित</span>
+            </div>
+          ) : (
+            <Link
+              to={`/complaints/${assignment.id}`}
+              target="_blank"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.4rem",
+                background: "#ffffff",
+                color: "#0b3a6d",
+                border: "1px solid #bfdbfe",
+                borderRadius: 10,
+                padding: "0.7rem",
+                fontSize: "0.84rem",
+                fontWeight: 700,
+                textDecoration: "none",
+              }}
+            >
+              <ExternalLink size={14} />
+              नागरिक सार्वजनिक पोर्टल पर देखें (View on Public Portal)
+            </Link>
+          )}
         </div>
       )}
 

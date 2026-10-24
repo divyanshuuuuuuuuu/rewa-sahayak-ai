@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Sparkles, Clock, Film, Video, Camera, Upload, CheckCircle2, Eye, EyeOff, MessageSquare, Download, Share2, PhoneCall, HardHat, RotateCcw } from 'lucide-react';
-import { getComplaintById, updateComplaintStatus, assignComplaint, reopenComplaint, updateComplaintPriority, syncFromSupabase } from '../../services/store';
+import {
+  getComplaintById, updateComplaintStatus, assignComplaint, reopenComplaint, updateComplaintPriority,
+  syncFromSupabase, adminRemoveComplaintFromWebsite, adminRestoreComplaintToWebsite
+} from '../../services/store';
 import { uploadReportImage, getImageUrl } from '../../services/supabaseStore';
 import {
   getDepartmentWorkers,
@@ -46,6 +49,11 @@ export default function AdminComplaintDetail() {
   const [customPhone, setCustomPhone] = useState('');
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
+
+  // Website Public Removal States (Admin Control - Preserved in Worker Dashboard)
+  const [removingFromSite, setRemovingFromSite] = useState(false);
+  const [removalReasonInput, setRemovalReasonInput] = useState('');
+  const [showRemovalModal, setShowRemovalModal] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -277,6 +285,50 @@ export default function AdminComplaintDetail() {
     if (!internalNote.trim()) return;
     const updated = updateComplaintStatus(complaint.id, complaint.status, internalNote, 'Admin Officer');
     if (updated) { setComplaint({ ...updated }); setInternalNote(''); }
+  };
+
+  const handleRemoveFromSite = async () => {
+    if (!complaint) return;
+    setRemovingFromSite(true);
+    const res = await adminRemoveComplaintFromWebsite(complaint.id, removalReasonInput);
+    if (res.success) {
+      await syncFromSupabase();
+      const updated = getComplaintById(complaint.id);
+      if (updated) setComplaint({ ...updated });
+      setShowRemovalModal(false);
+      setRemovalReasonInput('');
+      await logAudit({
+        action: 'COMPLAINT_REMOVED_FROM_PUBLIC',
+        department_name: complaint.assigned_department || 'General Administration',
+        complaint_ref: complaint.ticket_number,
+        performed_by: 'Super Admin',
+        details: `Complaint #${complaint.ticket_number} removed from public website. Reason: ${removalReasonInput || 'Administrative archive'}. Preserved in worker dashboard.`,
+      });
+    } else {
+      alert(res.error || 'Failed to remove complaint from website');
+    }
+    setRemovingFromSite(false);
+  };
+
+  const handleRestoreToSite = async () => {
+    if (!complaint) return;
+    setRemovingFromSite(true);
+    const res = await adminRestoreComplaintToWebsite(complaint.id);
+    if (res.success) {
+      await syncFromSupabase();
+      const updated = getComplaintById(complaint.id);
+      if (updated) setComplaint({ ...updated });
+      await logAudit({
+        action: 'COMPLAINT_RESTORED_TO_PUBLIC',
+        department_name: complaint.assigned_department || 'General Administration',
+        complaint_ref: complaint.ticket_number,
+        performed_by: 'Super Admin',
+        details: `Complaint #${complaint.ticket_number} restored to public website by Super Admin.`,
+      });
+    } else {
+      alert(res.error || 'Failed to restore complaint to website');
+    }
+    setRemovingFromSite(false);
   };
 
   return (
@@ -537,6 +589,72 @@ export default function AdminComplaintDetail() {
               )}
             </div>
 
+            {/* Website Public Visibility & Removal Card (Admin Control) */}
+            <div className="card" style={{
+              border: complaint.removed_from_website ? '2px solid #ef4444' : '1.5px solid #cbd5e1',
+              background: complaint.removed_from_website ? '#fef2f2' : '#ffffff',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                <h3 className="detail-section-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.45rem', color: complaint.removed_from_website ? '#991b1b' : '#0b3a6d' }}>
+                  {complaint.removed_from_website ? <EyeOff size={16} color="#dc2626" /> : <Eye size={16} color="#0b3a6d" />}
+                  <span>{bilingual('वेबसाइट दृश्यता नियंत्रण (Website Visibility)', 'Website Visibility Control')}</span>
+                </h3>
+                <span className="badge" style={{
+                  background: complaint.removed_from_website ? '#fee2e2' : '#dcfce7',
+                  color: complaint.removed_from_website ? '#991b1b' : '#15803d',
+                  fontSize: '0.68rem',
+                  fontWeight: 800,
+                  border: complaint.removed_from_website ? '1px solid #fca5a5' : '1px solid #86efac',
+                }}>
+                  {complaint.removed_from_website ? bilingual('🚫 साइट से हटाई गई', 'HIDDEN FROM SITE') : bilingual('✓ लाइव सक्रिय', 'LIVE ON SITE')}
+                </span>
+              </div>
+
+              <p style={{ fontSize: '0.78rem', color: complaint.removed_from_website ? '#991b1b' : '#64748b', lineHeight: 1.45, marginBottom: '0.75rem' }}>
+                {complaint.removed_from_website
+                  ? bilingual(
+                      'यह शिकायत सार्वजनिक वेबसाइट व मैप से हटा दी गई है, किंतु फील्ड वर्कर के डैशबोर्ड में उसके किए गए कार्य की गिनती (Work Done Count) व रिकॉर्ड सुरक्षित है।',
+                      'This complaint is removed from the public website, but strictly preserved in the worker dashboard to count work done by them.'
+                    )
+                  : bilingual(
+                      'यदि यह शिकायत पूर्ण हो चुकी है, तो आप इसे पूरी सार्वजनिक वेबसाइट से हटा सकते हैं। फील्ड कर्मी के डैशबोर्ड में कार्य गणना सुरक्षित रहेगी।',
+                      'You can remove this complaint from the public website. It will strictly remain preserved in the worker dashboard to count their work.'
+                    )}
+              </p>
+
+              {complaint.removed_from_website ? (
+                <div>
+                  {complaint.removal_reason && (
+                    <div style={{ background: '#ffffff', border: '1px solid #fecaca', borderRadius: 6, padding: '0.5rem', fontSize: '0.75rem', color: '#7f1d1d', marginBottom: '0.65rem' }}>
+                      <strong>कारण:</strong> "{complaint.removal_reason}"
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    style={{ width: '100%', justifyContent: 'center', background: '#16a34a', borderColor: '#15803d', fontWeight: 700 }}
+                    onClick={handleRestoreToSite}
+                    disabled={removingFromSite}
+                  >
+                    {removingFromSite ? bilingual('बहाल हो रहा है...', 'Restoring...') : bilingual('↺ वेबसाइट पर पुनः बहाल करें (Restore to Website)', 'Restore to Public Website')}
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <button
+                    type="button"
+                    id="admin-remove-from-site-btn"
+                    className="btn btn-secondary btn-sm"
+                    style={{ width: '100%', justifyContent: 'center', background: '#dc2626', color: '#ffffff', borderColor: '#b91c1c', fontWeight: 700 }}
+                    onClick={() => setShowRemovalModal(true)}
+                  >
+                    {bilingual('🗑️ वेबसाइट से हटाएं (Remove from Website)', 'Remove from Public Website')}
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Change Status */}
             <div className="card">
               <h3 className="detail-section-title">{bilingual('स्थिति अद्यतन करें', 'Change Status')}</h3>
@@ -790,6 +908,83 @@ export default function AdminComplaintDetail() {
           </div>
         </div>
       </div>
+
+      {/* Confirmation Modal: Remove Complaint from Website */}
+      {showRemovalModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.65)',
+          backdropFilter: 'blur(3px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1rem',
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: 16,
+            maxWidth: 480,
+            width: '100%',
+            padding: '1.5rem',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
+            border: '2px solid #ef4444',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#991b1b', marginBottom: '0.75rem' }}>
+              <EyeOff size={24} />
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>
+                {bilingual('वेबसाइट से शिकायत हटाएं?', 'Remove from Public Website?')}
+              </h3>
+            </div>
+
+            <p style={{ fontSize: '0.86rem', color: '#334155', lineHeight: 1.55, marginBottom: '0.85rem' }}>
+              {bilingual(
+                'यह कार्रवाई इस शिकायत को नागरिक पोर्टल, मैप एवं सार्वजनिक फीड से हटा देगी।',
+                'This action will remove this complaint from the public citizen portal, incident map, and public tracking feed.'
+              )}
+            </p>
+
+            <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: 8, padding: '0.75rem', marginBottom: '1rem', fontSize: '0.8rem', color: '#166534' }}>
+              <strong>✓ फील्ड कर्मी रिकॉर्ड गारंटी:</strong> फील्ड वर्कर के डैशबोर्ड में उसके द्वारा किए गए कार्य की गिनती (Work Done Counter), बिफोर/आफ्टर साक्ष्य व स्कोर <strong>100% सुरक्षित रहेगा</strong>।
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '0.35rem' }}>
+                {bilingual('हटाने का कारण दर्ज करें (ऐच्छिक):', 'Reason for Removal (Optional):')}
+              </label>
+              <textarea
+                className="form-input"
+                rows={2}
+                placeholder={bilingual('उदा. कार्य पूर्ण होकर नागरिक संतुष्ट, सार्वजनिक फीड से हटाया जा रहा है...', 'e.g. Work completed and citizen satisfied, archiving from public feed...')}
+                value={removalReasonInput}
+                onChange={(e) => setRemovalReasonInput(e.target.value)}
+                style={{ fontSize: '0.84rem' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowRemovalModal(false)}
+                disabled={removingFromSite}
+              >
+                {bilingual('रद्द करें (Cancel)', 'Cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{ background: '#dc2626', color: '#ffffff', borderColor: '#b91c1c', fontWeight: 800, padding: '0.5rem 1rem' }}
+                onClick={handleRemoveFromSite}
+                disabled={removingFromSite}
+              >
+                {removingFromSite ? bilingual('हटाया जा रहा है...', 'Removing...') : bilingual('हाँ, वेबसाइट से हटाएं', 'Confirm Removal')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

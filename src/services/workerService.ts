@@ -51,6 +51,8 @@ export interface WorkerAssignment {
   work_duration_seconds?: number | null;
   worker_resolution_location?: { latitude: number; longitude: number; accuracy?: number } | null;
   delay_reason?: string | null;
+  removed_from_website?: boolean | null;
+  removal_reason?: string | null;
   submitted_at: string;
   updated_at: string;
   citizen_name: string | null;
