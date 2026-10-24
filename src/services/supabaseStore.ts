@@ -128,6 +128,17 @@ export async function createReport(
   return { report: data as DbReport, error: null };
 }
 
+// Sort reports so that any complaint marked as SUBMITTED is placed at the bottom (last) of all complaints.
+export function sortDbReports(reports: DbReport[]): DbReport[] {
+  return [...reports].sort((a, b) => {
+    const aIsSubmitted = a.current_status === "SUBMITTED";
+    const bIsSubmitted = b.current_status === "SUBMITTED";
+    if (aIsSubmitted && !bIsSubmitted) return 1; // SUBMITTED moves towards the bottom
+    if (!aIsSubmitted && bIsSubmitted) return -1; // non-SUBMITTED stays at the top
+    return new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime();
+  });
+}
+
 // ─── Fetch reports (public feed — approved only) ─────────────────────────────
 export async function getPublicReports(options?: {
   category?: string;
@@ -160,7 +171,8 @@ export async function getPublicReports(options?: {
 
   const { data, error, count } = await query;
   if (error) return { reports: [], total: 0, error: error.message };
-  return { reports: (data as DbReport[]) ?? [], total: count ?? 0, error: null };
+  const rawReports = (data as DbReport[]) ?? [];
+  return { reports: sortDbReports(rawReports), total: count ?? 0, error: null };
 }
 
 // ─── Fetch citizen's own reports ─────────────────────────────────────────────
@@ -175,7 +187,8 @@ export async function getMyCitizenReports(): Promise<{ reports: DbReport[]; erro
     .order("submitted_at", { ascending: false });
 
   if (error) return { reports: [], error: error.message };
-  return { reports: (data as DbReport[]) ?? [], error: null };
+  const rawReports = (data as DbReport[]) ?? [];
+  return { reports: sortDbReports(rawReports), error: null };
 }
 
 // ─── Fetch single report (citizen can see own, public can see approved) ───────

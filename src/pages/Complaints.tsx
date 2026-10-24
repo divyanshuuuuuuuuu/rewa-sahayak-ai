@@ -68,15 +68,19 @@ export default function Complaints() {
   const formatDate = (d: string) => new Date(d).toLocaleDateString(lang === "hi" ? "hi-IN" : "en-IN", { day: "numeric", month: "short", year: "numeric" });
 
   const displayed = useMemo(() => {
-    if (viewMode === "mine") {
-      let list = reports;
-      if (search) {
-        const q = search.toLowerCase();
-        list = list.filter(r => r.title.toLowerCase().includes(q) || r.reference_number.toLowerCase().includes(q) || r.location_description?.toLowerCase().includes(q));
-      }
-      return list;
+    let list = reports;
+    if (viewMode === "mine" && search) {
+      const q = search.toLowerCase();
+      list = list.filter(r => r.title.toLowerCase().includes(q) || r.reference_number.toLowerCase().includes(q) || r.location_description?.toLowerCase().includes(q));
     }
-    return reports;
+    // Complaints marked as SUBMITTED are placed at the bottom of all complaints
+    return [...list].sort((a, b) => {
+      const aIsSubmitted = a.current_status === "SUBMITTED";
+      const bIsSubmitted = b.current_status === "SUBMITTED";
+      if (aIsSubmitted && !bIsSubmitted) return 1; // SUBMITTED moves towards bottom
+      if (!aIsSubmitted && bIsSubmitted) return -1; // non-SUBMITTED stays at top
+      return new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime();
+    });
   }, [reports, search, viewMode]);
 
   return (

@@ -202,7 +202,16 @@ export async function getMyAssignments(): Promise<{ assignments: WorkerAssignmen
     isComplaintAuthorizedForDepartment(deptKey, deptName, r)
   );
 
-  return { assignments: authorized, error: null };
+  // Complaints marked as SUBMITTED are placed at the bottom of all complaints
+  const sorted = [...authorized].sort((a, b) => {
+    const aIsSubmitted = a.current_status === "SUBMITTED";
+    const bIsSubmitted = b.current_status === "SUBMITTED";
+    if (aIsSubmitted && !bIsSubmitted) return 1; // SUBMITTED moves towards bottom
+    if (!aIsSubmitted && bIsSubmitted) return -1; // non-SUBMITTED stays at top
+    return new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime();
+  });
+
+  return { assignments: sorted, error: null };
 }
 
 // ─── Get Single Assignment with Flexible Lookup & Direct Inspection Support ───

@@ -31,7 +31,14 @@ export default function AdminComplaints() {
       const q = search.toLowerCase();
       list = list.filter(c => c.title.toLowerCase().includes(q) || c.ticket_number.toLowerCase().includes(q) || c.address.toLowerCase().includes(q) || c.description.toLowerCase().includes(q));
     }
-    return list;
+    // Complaints marked as SUBMITTED are placed at the bottom of all complaints
+    return [...list].sort((a, b) => {
+      const aIsSubmitted = a.status === 'SUBMITTED';
+      const bIsSubmitted = b.status === 'SUBMITTED';
+      if (aIsSubmitted && !bIsSubmitted) return 1; // SUBMITTED moves towards bottom
+      if (!aIsSubmitted && bIsSubmitted) return -1; // non-SUBMITTED stays at top
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
   }, [allComplaints, moduleFilter, statusFilter, categoryFilter, severityFilter, search]);
 
   const formatDate = (d: string) =>

@@ -152,13 +152,23 @@ if (typeof window !== 'undefined') {
   }
 }
 
+// Sort complaints so that any complaint marked as SUBMITTED is placed at the bottom (last) of all complaints.
+// All active/in-progress/assigned/delayed/resolved complaints appear first.
+export function sortComplaints(complaints: Complaint[]): Complaint[] {
+  return [...complaints].sort((a, b) => {
+    const aIsSubmitted = a.status === 'SUBMITTED';
+    const bIsSubmitted = b.status === 'SUBMITTED';
+    if (aIsSubmitted && !bIsSubmitted) return 1; // SUBMITTED moves towards the bottom
+    if (!aIsSubmitted && bIsSubmitted) return -1; // non-SUBMITTED stays at the top
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+}
+
 export function getAllComplaints(): Complaint[] {
   if (memoryComplaints.length === 0) {
     memoryComplaints = loadComplaintsFromStorage();
   }
-  return [...memoryComplaints].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+  return sortComplaints(memoryComplaints);
 }
 
 export function getComplaintById(id: string): Complaint | undefined {
@@ -211,8 +221,8 @@ export function createComplaint(
     ],
   };
 
-  // Update memory and storage immediately for optimistic UI
-  memoryComplaints = [newComplaint, ...memoryComplaints];
+  // Update memory and storage immediately for optimistic UI (SUBMITTED placed at the bottom)
+  memoryComplaints = sortComplaints([...memoryComplaints, newComplaint]);
   saveComplaintsToStorage(memoryComplaints);
 
   // Asynchronously insert into Supabase
@@ -299,8 +309,8 @@ export function updateComplaintStatus(
     complaints[idx].resolution_note = note;
   }
 
-  memoryComplaints = complaints;
-  saveComplaintsToStorage(complaints);
+  memoryComplaints = sortComplaints(complaints);
+  saveComplaintsToStorage(memoryComplaints);
 
   // Sync to Supabase
   (async () => {
