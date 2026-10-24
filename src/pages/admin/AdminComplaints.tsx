@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Search } from 'lucide-react';
+import { Search, MapPin } from 'lucide-react';
 import { getAllComplaints, syncFromSupabase } from '../../services/store';
 import { statusColors, severityColors, moduleColors, categoryIcons } from '../../services/ai';
 import { useGov } from '../../context/GovContext';
@@ -168,10 +168,14 @@ export default function AdminComplaints() {
                   {c.title}
                 </div>
 
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.78rem', color: '#64748b' }}>
-                  <span>{categoryIcons[c.category]} {categoryLabel(c.category)}</span>
-                  <span>•</span>
-                  <span>{c.address || 'Rewa'}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '0.55rem', fontSize: '0.8rem', color: '#526273' }}>
+                  <span style={{ fontWeight: 600 }}>{categoryIcons[c.category]} {categoryLabel(c.category)}</span>
+                  {c.address && (
+                    <span style={{ display: 'flex', alignItems: 'flex-start', gap: '0.25rem', color: '#475569', lineHeight: 1.35 }}>
+                      <MapPin size={13} style={{ flexShrink: 0, marginTop: 2, color: 'var(--gov-saffron)' }} />
+                      <span>{c.address}</span>
+                    </span>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.5rem', borderTop: '1px solid #f1f5f9', marginTop: '0.4rem', flexWrap: 'wrap', gap: '0.5rem' }}>

@@ -187,51 +187,56 @@ export default function Complaints() {
           <>
             <div style={{ display: "grid", gap: "0.85rem" }}>
               {displayed.map(r => (
-                <Link to={`/complaints/${r.id}`} key={r.id} style={{ textDecoration: "none", color: "inherit" }}>
+                <Link to={`/complaints/${r.id}`} key={r.id} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
                   <div className="complaint-card">
-                    <div className="complaint-card-header">
-                      <div style={{ flex: 1 }}>
-                        <div className="complaint-card-title">
-                          {(categoryIcons as any)[r.category] || "📋"} {r.title}
-                        </div>
-                        <div className="complaint-card-meta" style={{ marginTop: "0.35rem" }}>
-                          <span style={{ fontWeight: 800, color: "#0b3a6d", background: "#eef4fb", padding: "0.1rem 0.4rem", borderRadius: 4 }}>
-                            {r.reference_number}
-                          </span>
-                          <span>•</span>
-                          <span style={{ fontWeight: 600, color: "#334155" }}>{categoryLabel(r.category)}</span>
-                          {r.location_description && (
-                            <>
-                              <span>•</span>
-                              <span style={{ color: "#475569" }}>
-                                <MapPin size={13} style={{ verticalAlign: "middle", marginRight: 2 }} />
-                                {r.location_description}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                        <span className="badge" style={{ background: `${statusColors[r.current_status] || "#64748b"}20`, color: statusColors[r.current_status] || "#64748b", border: `1px solid ${statusColors[r.current_status] || "#64748b"}44` }}>
+                    {/* Top Row: Ticket Number on Left, Status + Priority on Right */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.55rem", flexWrap: "wrap", gap: "0.4rem" }}>
+                      <span className="ticket-badge" style={{ color: "var(--gov-navy)", background: "#eef4fb", padding: "0.2rem 0.55rem", borderRadius: 4, fontWeight: 800, fontSize: "0.82rem" }}>
+                        {r.reference_number}
+                      </span>
+                      <div style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "wrap" }}>
+                        <span className="badge" style={{ background: `${statusColors[r.current_status] || "#64748b"}20`, color: statusColors[r.current_status] || "#64748b", border: `1px solid ${statusColors[r.current_status] || "#64748b"}44`, fontSize: "0.72rem", padding: "0.2rem 0.55rem" }}>
                           ● {statusLabel(r.current_status)}
                         </span>
-                        <span className="badge" style={{ background: r.severity === "HIGH" ? "#fee2e220" : r.severity === "MEDIUM" ? "#fef3c720" : "#f0fdf420", color: r.severity === "HIGH" ? "#dc2626" : r.severity === "MEDIUM" ? "#d97706" : "#15803d" }}>
+                        <span className="badge" style={{ background: r.severity === "HIGH" ? "#fee2e2" : r.severity === "MEDIUM" ? "#fef3c7" : "#f0fdf4", color: r.severity === "HIGH" ? "#dc2626" : r.severity === "MEDIUM" ? "#d97706" : "#15803d", border: `1px solid ${r.severity === "HIGH" ? "#fca5a5" : r.severity === "MEDIUM" ? "#fde68a" : "#bbf7d0"}`, fontSize: "0.72rem", padding: "0.2rem 0.55rem" }}>
                           {r.severity}
                         </span>
                       </div>
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", paddingTop: "0.6rem", borderTop: "1px solid #f1f5f9", flexWrap: "wrap", gap: "0.4rem" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <span className="badge" style={{ background: `${MODULE_COLORS[r.module]}15`, color: MODULE_COLORS[r.module], border: `1px solid ${MODULE_COLORS[r.module]}33` }}>
+
+                    {/* Middle: Full-Width Title (never squashed or broken into narrow columns) */}
+                    <h3 className="complaint-card-title" style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--gov-navy)", lineHeight: 1.45, margin: "0 0 0.55rem 0", wordBreak: "break-word" }}>
+                      {(categoryIcons as any)[r.category] || "📋"} {r.title}
+                    </h3>
+
+                    {/* Category & Location details */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", marginBottom: "0.65rem", fontSize: "0.84rem", color: "var(--text-secondary)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
+                        <span style={{ fontWeight: 600, color: "#334155" }}>
+                          {categoryLabel(r.category)}
+                        </span>
+                      </div>
+                      {r.location_description && (
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: "0.35rem", color: "#475569", lineHeight: 1.4 }}>
+                          <MapPin size={14} style={{ flexShrink: 0, marginTop: 2, color: "#d95d08" }} />
+                          <span style={{ wordBreak: "break-word" }}>{r.location_description}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bottom Row: Module Tag, Photo Evidence Indicator, and Date */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.5rem", paddingTop: "0.6rem", borderTop: "1px solid #e2e8f0", flexWrap: "wrap", gap: "0.4rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
+                        <span className="badge" style={{ background: `${MODULE_COLORS[r.module] || "#64748b"}15`, color: MODULE_COLORS[r.module] || "#64748b", border: `1px solid ${MODULE_COLORS[r.module] || "#64748b"}33`, fontSize: "0.7rem", padding: "0.15rem 0.5rem" }}>
                           {r.module.replace("_", " ")}
                         </span>
                         {r.before_image_path && (
-                          <span style={{ fontSize: "0.72rem", color: "#15803d", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.25rem", background: "#dcfce7", padding: "0.12rem 0.45rem", borderRadius: 4 }}>
-                            <Camera size={11} /> {bilingual("फोटो साक्ष्य", "Photo Attached")}
+                          <span style={{ fontSize: "0.72rem", color: "#15803d", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.25rem", background: "#dcfce7", padding: "0.15rem 0.5rem", borderRadius: 4, border: "1px solid #86efac" }}>
+                            <Camera size={12} /> {bilingual("फोटो साक्ष्य", "Photo Attached")}
                           </span>
                         )}
                       </div>
-                      <span style={{ fontSize: "0.78rem", color: "#64748b", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                      <span style={{ fontSize: "0.76rem", color: "#64748b", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
                         <Clock size={12} /> {formatDate(r.submitted_at)}
                       </span>
                     </div>

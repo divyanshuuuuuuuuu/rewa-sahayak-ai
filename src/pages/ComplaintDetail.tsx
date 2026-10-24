@@ -160,13 +160,15 @@ export default function ComplaintDetail() {
                 {categoryIcons[complaint.category]} {complaint.title}
               </h1>
 
-              <p style={{ color: '#526273', fontSize: '0.85rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.4rem' }}>
-                <span className="ticket-badge" style={{ color: 'var(--gov-navy)', background: '#eef4fb', padding: '2px 6px', borderRadius: '4px' }}>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem', marginTop: '0.4rem' }}>
+                <span className="ticket-badge" style={{ color: 'var(--gov-navy)', background: '#eef4fb', padding: '2px 8px', borderRadius: '4px', fontWeight: 800 }}>
                   {complaint.ticket_number}
                 </span>
-                <span>•</span>
-                <span>{bilingual('पंजीकृत तिथि:', 'Registration Date:')} {formatDateTime(complaint.created_at)}</span>
-              </p>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', color: '#64748b' }}>
+                  <Clock size={13} />
+                  <span>{bilingual('पंजीकृत:', 'Registered:')} {formatDateTime(complaint.created_at)}</span>
+                </span>
+              </div>
             </div>
 
             <div style={{ textAlign: 'left', flexShrink: 0 }}>
