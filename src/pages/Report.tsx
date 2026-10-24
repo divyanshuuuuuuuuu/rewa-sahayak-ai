@@ -2,13 +2,17 @@ import { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Mic, MicOff, Camera, Type, MapPin, Send, CheckCircle2, Navigation,
-  Sparkles, Printer, ArrowLeft, ShieldCheck, ShieldAlert, Video, Film, Trash2, Plus, Play
+  Sparkles, Printer, ArrowLeft, ShieldCheck, ShieldAlert, Video, Film, Trash2, Plus, Play,
+  AlertTriangle, Eye, Check, X
 } from 'lucide-react';
-import { analyzeProblemDemo, analyzeImageDemo, moduleNames, severityColors, categoryIcons } from '../services/ai';
+import {
+  analyzeProblemDemo, analyzeImageDemo, analyzeCivicImageAsync, categoryRoutingDetails,
+  type CivicVisionResult, moduleNames, severityColors, categoryIcons
+} from '../services/ai';
 import { createComplaint } from '../services/store';
 import { uploadReportImage, getImageUrl } from '../services/supabaseStore';
 import { getCivicEvidenceSvg, getCivicVideoPosterSvg, createSampleCivicVideoBlob } from '../services/evidenceSvg';
-import type { AIAnalysis, CivicMedia } from '../types';
+import type { AIAnalysis, CivicMedia, Category } from '../types';
 import MapView from '../components/MapView';
 import { AshokaEmblem, RewaMunicipalLogo } from '../components/Emblem';
 import { useGov } from '../context/GovContext';
@@ -36,6 +40,15 @@ export default function Report() {
   const [quickNotice, setQuickNotice] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [locationStatus, setLocationStatus] = useState<string | null>(null);
+  const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
+  const [aiVisionResult, setAiVisionResult] = useState<CivicVisionResult | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [isManualOverride, setIsManualOverride] = useState(false);
+  const [pendingCategoryOverride, setPendingCategoryOverride] = useState<{
+    targetCategory: Category;
+    targetProblem?: any;
+  } | null>(null);
+  const [showCategorySelectModal, setShowCategorySelectModal] = useState(false);
   const locationInputRef = useRef<HTMLInputElement>(null);
   const evidenceSectionRef = useRef<HTMLDivElement>(null);
   const [showMap, setShowMap] = useState(false);
@@ -63,7 +76,19 @@ export default function Report() {
     { name: 'वार्ड 24 - किला चौराहा', coords: [24.5390, 81.3120] as [number, number] },
   ];
 
-  // Common pre-set issues with bilingual support and geo-evidence type
+  const allCategories: Category[] = [
+    'Waste Management',
+    'Water & Leakage',
+    'Waterlogging & Drainage',
+    'Roads & Potholes',
+    'Streetlights',
+    'Public Cleanliness',
+    'Sanitation',
+    'Government Service Assistance',
+    'Other Civic Issue',
+  ];
+
+  // Common pre-set issues with category mapping and bilingual support
   const quickProblems = [
     {
       hi: 'वार्ड में 4 दिन से कचरा नहीं उठाया गया है',
@@ -72,6 +97,7 @@ export default function Report() {
       tagEn: 'Garbage Not Picked',
       icon: '🗑️',
       type: 'garbage' as const,
+      category: 'Waste Management' as Category,
     },
     {
       hi: 'मुख्य पाइपलाइन में लीकेज है, भारी मात्रा में पेयजल व्यर्थ बह रहा है',
@@ -80,6 +106,7 @@ export default function Report() {
       tagEn: 'Water Pipe Leak',
       icon: '💧',
       type: 'leakage' as const,
+      category: 'Water & Leakage' as Category,
     },
     {
       hi: 'सड़क की स्ट्रीट लाइट पिछले 1 सप्ताह से बंद पड़ी है, रात में अंधेरा रहता है',
@@ -88,6 +115,7 @@ export default function Report() {
       tagEn: 'Streetlight Off',
       icon: '💡',
       type: 'streetlight' as const,
+      category: 'Streetlights' as Category,
     },
     {
       hi: 'सड़क पर बड़ा और खतरनाक गड्ढा है, दुर्घटना का खतरा बना हुआ है',
@@ -96,6 +124,7 @@ export default function Report() {
       tagEn: 'Road Pothole',
       icon: '🕳️',
       type: 'pothole' as const,
+      category: 'Roads & Potholes' as Category,
     },
     {
       hi: 'नाली जाम हो गई है, गंदा बदबूदार पानी सड़क पर बह रहा है',
@@ -104,6 +133,7 @@ export default function Report() {
       tagEn: 'Drainage Overflow',
       icon: '🌊',
       type: 'drainage' as const,
+      category: 'Waterlogging & Drainage' as Category,
     },
     {
       hi: 'कचरा डिपो भर चुका है और चारों तरफ गंदगी फैली हुई है',
@@ -112,14 +142,29 @@ export default function Report() {
       tagEn: 'Dustbin Overflow',
       icon: '📦',
       type: 'dustbin' as const,
+      category: 'Waste Management' as Category,
     },
   ];
 
-  // 1-Tap Quick Issue selection: Sets issue description and guides citizen to mandatory photo & location
+  // 1-Tap Quick Issue selection with professional AI override check
   const handleQuickSelect = (prob: (typeof quickProblems)[0]) => {
+    // If AI Vision detected a category and user is picking a DIFFERENT category:
+    if (aiVisionResult && selectedCategory && prob.category !== selectedCategory) {
+      setPendingCategoryOverride({
+        targetCategory: prob.category,
+        targetProblem: prob,
+      });
+      return;
+    }
+
+    applyQuickSelect(prob);
+  };
+
+  const applyQuickSelect = (prob: (typeof quickProblems)[0]) => {
     const issueText = lang === 'hi' ? prob.hi : prob.en;
     setText(issueText);
     setSelectedQuickProblem(prob.tagEn);
+    setSelectedCategory(prob.category);
     setFormError(null);
     setQuickNotice(
       bilingual(
@@ -127,12 +172,81 @@ export default function Report() {
         `✓ Issue selected: "${prob.tagEn}". Rewa Municipal Rule: Now please (1) capture/upload compulsory spot photo and (2) select location below. (Video is optional)`
       )
     );
-    // Switch to photo mode so photo capture/upload options are directly in front of citizen
     setMode('photo');
-    // Scroll smoothly to photo evidence section
     setTimeout(() => {
       evidenceSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 120);
+  };
+
+  const handleManualCategorySelect = (newCategory: Category) => {
+    setShowCategorySelectModal(false);
+    if (aiVisionResult && selectedCategory && newCategory !== selectedCategory) {
+      setPendingCategoryOverride({
+        targetCategory: newCategory,
+      });
+      return;
+    }
+    applyCategoryOverride(newCategory);
+  };
+
+  const applyCategoryOverride = (newCategory: Category) => {
+    setSelectedCategory(newCategory);
+    setIsManualOverride(true);
+    const matchChip = quickProblems.find((p) => p.category === newCategory);
+    if (matchChip) {
+      setSelectedQuickProblem(matchChip.tagEn);
+    }
+    if (analysis) {
+      const updated = analyzeProblemDemo(text, newCategory);
+      setAnalysis(updated);
+    }
+  };
+
+  const confirmCategoryOverride = () => {
+    if (!pendingCategoryOverride) return;
+    const targetCat = pendingCategoryOverride.targetCategory;
+    const targetProb = pendingCategoryOverride.targetProblem;
+
+    setIsManualOverride(true);
+    setSelectedCategory(targetCat);
+
+    if (targetProb) {
+      applyQuickSelect(targetProb);
+    } else {
+      applyCategoryOverride(targetCat);
+    }
+
+    setPendingCategoryOverride(null);
+  };
+
+  const cancelCategoryOverride = () => {
+    setPendingCategoryOverride(null);
+  };
+
+  // AI Vision Trigger: Analyzes image to auto-detect category, title, description, and severity
+  const triggerImageVision = async (file: File | string) => {
+    setIsAnalyzingImage(true);
+    try {
+      const vision = await analyzeCivicImageAsync(file, text);
+      setAiVisionResult(vision);
+      setImageAnalysis(vision);
+
+      // Auto-select category if citizen hasn't manually overridden
+      if (!isManualOverride) {
+        setSelectedCategory(vision.detected_category);
+        const matchChip = quickProblems.find((p) => p.category === vision.detected_category);
+        if (matchChip) {
+          setSelectedQuickProblem(matchChip.tagEn);
+        }
+        if (!text.trim() || text.trim().length < 15) {
+          setText(lang === 'hi' ? vision.suggested_description_hi : vision.suggested_description_en);
+        }
+      }
+    } catch (err) {
+      console.warn('AI Vision error:', err);
+    } finally {
+      setIsAnalyzingImage(false);
+    }
   };
 
   // Voice recording
@@ -235,6 +349,7 @@ export default function Report() {
       });
       if (!isVideo && !imageFile) {
         setImageFile(file);
+        triggerImageVision(file);
       }
     });
     setMediaList((prev) => [...prev, ...newItems]);
@@ -246,6 +361,7 @@ export default function Report() {
     const file = e.target.files?.[0];
     if (!file) return;
     setImageFile(file);
+    triggerImageVision(file);
     const url = URL.createObjectURL(file);
     const item: CivicMedia = {
       id: `cam-p-${Date.now()}`,
@@ -291,9 +407,13 @@ export default function Report() {
   const removeMediaItem = (id: string) => {
     setMediaList((prev) => {
       const remaining = prev.filter((m) => m.id !== id);
-      const hasImg = remaining.some((m) => m.type === 'image');
-      if (!hasImg) {
+      const remainingImages = remaining.filter((m) => m.type === 'image');
+      if (remainingImages.length === 0) {
         setImageFile(null);
+        setAiVisionResult(null);
+        setIsManualOverride(false);
+      } else {
+        triggerImageVision(remainingImages[0].url);
       }
       return remaining;
     });
@@ -473,10 +593,11 @@ export default function Report() {
     setStep('processing');
     await new Promise((r) => setTimeout(r, 1200));
 
-    const result = analyzeProblemDemo(text || 'Civic problem reported with verified evidence');
+    const chosenCat = selectedCategory || (aiVisionResult ? aiVisionResult.detected_category : undefined);
+    const result = analyzeProblemDemo(text || 'Civic problem reported with verified evidence', chosenCat);
     setAnalysis(result);
 
-    const imgResult = analyzeImageDemo();
+    const imgResult = aiVisionResult || analyzeImageDemo(chosenCat);
     setImageAnalysis(imgResult);
 
     setStep('preview');
@@ -541,7 +662,9 @@ export default function Report() {
       ai_summary: analysis.description,
       ai_confidence: analysis.confidence,
       assigned_department:
-        analysis.module === 'smart_waste'
+        categoryRoutingDetails[analysis.category]
+          ? bilingual(categoryRoutingDetails[analysis.category].departmentHi, categoryRoutingDetails[analysis.category].departmentEn)
+          : analysis.module === 'smart_waste'
           ? bilingual('स्वास्थ्य एवं स्वच्छता विभाग', 'Health & Public Sanitation Dept')
           : analysis.module === 'jalrakshak'
           ? bilingual('जल कार्य एवं सीवरेज विभाग', 'Water Works & Drainage Dept')
@@ -560,6 +683,10 @@ export default function Report() {
     setMediaList([]);
     setAnalysis(null);
     setImageAnalysis(null);
+    setAiVisionResult(null);
+    setSelectedCategory(null);
+    setIsManualOverride(false);
+    setPendingCategoryOverride(null);
     setSelectedQuickProblem(null);
     setFormError(null);
     setQuickNotice(null);
@@ -743,6 +870,107 @@ export default function Report() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* AI Vision Status & Auto-Identification Banner */}
+      {isAnalyzingImage && (
+        <div style={{
+          background: '#eff6ff',
+          border: '1.5px solid #60a5fa',
+          borderRadius: '10px',
+          padding: '0.85rem 1rem',
+          marginTop: '0.85rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          color: '#1e40af',
+          fontSize: '0.88rem',
+          fontWeight: 700
+        }}>
+          <div className="ai-spinner" style={{ width: '20px', height: '20px', borderWidth: '2.5px' }} />
+          <span>{bilingual('🔍 AI Vision: फोटो का विश्लेषण कर रहे हैं व समस्या पहचान रहे हैं...', '🔍 AI Vision: Analyzing photo & auto-detecting civic issue...')}</span>
+        </div>
+      )}
+
+      {aiVisionResult && !isAnalyzingImage && (
+        <div style={{
+          background: isManualOverride ? '#fffbeb' : '#f0fdf4',
+          border: isManualOverride ? '1.5px solid #fcd34d' : '1.5px solid #86efac',
+          borderRadius: '12px',
+          padding: '1rem',
+          marginTop: '0.85rem',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+          textAlign: 'left'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <Sparkles size={18} color={isManualOverride ? '#d97706' : '#15803d'} />
+              <span style={{ fontWeight: 800, fontSize: '0.92rem', color: isManualOverride ? '#92400e' : '#166534' }}>
+                {bilingual('🤖 Rewa Sahayak AI Vision पहचान:', '🤖 Rewa Sahayak AI Vision Detected:')}
+              </span>
+            </div>
+            <span style={{
+              background: isManualOverride ? '#fef3c7' : '#dcfce7',
+              color: isManualOverride ? '#b45309' : '#15803d',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              padding: '2px 8px',
+              borderRadius: 12,
+              border: isManualOverride ? '1px solid #fde68a' : '1px solid #bbf7d0',
+            }}>
+              {isManualOverride
+                ? bilingual('⚠️ नागरिक द्वारा संशोधित (Overridden)', '⚠️ Citizen Override')
+                : bilingual(`✓ स्वतः चयनित (${Math.round(aiVisionResult.confidence * 100)}% विश्वास)`, `✓ Auto-Selected (${Math.round(aiVisionResult.confidence * 100)}% Confidence)`)}
+            </span>
+          </div>
+
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '8px',
+            padding: '0.75rem 0.9rem',
+            border: '1px solid #e2e8f0',
+            marginBottom: '0.5rem'
+          }}>
+            <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0b3a6d', marginBottom: '0.2rem' }}>
+              {categoryIcons[selectedCategory || aiVisionResult.detected_category]} {categoryLabel(selectedCategory || aiVisionResult.detected_category)}
+              <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, marginLeft: '0.4rem' }}>
+                ({selectedCategory && selectedCategory !== aiVisionResult.detected_category ? 'मैन्युअल श्रेणी' : aiVisionResult.detected_subcategory})
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: '#334155', lineHeight: 1.45 }}>
+              👁️ {lang === 'hi' ? aiVisionResult.visual_summary_hi : aiVisionResult.visual_summary_en}
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.76rem', color: '#64748b' }}>
+            <span>
+              🏛️ {bilingual('संबंधित विभाग:', 'Assigned Dept:')} <strong>{bilingual(categoryRoutingDetails[selectedCategory || aiVisionResult.detected_category]?.departmentHi || '', categoryRoutingDetails[selectedCategory || aiVisionResult.detected_category]?.departmentEn || '')}</strong>
+            </span>
+            {isManualOverride && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsManualOverride(false);
+                  setSelectedCategory(aiVisionResult.detected_category);
+                  const matchChip = quickProblems.find((p) => p.category === aiVisionResult.detected_category);
+                  if (matchChip) setSelectedQuickProblem(matchChip.tagEn);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#2563eb',
+                  fontWeight: 700,
+                  textDecoration: 'underline',
+                  cursor: 'pointer',
+                  fontSize: '0.76rem',
+                  padding: 0
+                }}
+              >
+                {bilingual('↩️ पुनः AI पहचान पर सेट करें', '↩️ Revert to AI Vision')}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -1283,10 +1511,27 @@ export default function Report() {
                   {analysis.title}
                 </span>
               </div>
-              <div className="preview-row">
+              <div className="preview-row" style={{ alignItems: 'flex-start' }}>
                 <span className="preview-label">{bilingual('विभाग / श्रेणी', 'Department / Category')}</span>
-                <span className="preview-value">
-                  {categoryIcons[analysis.category]} {categoryLabel(analysis.category)} ({analysis.subcategory})
+                <span className="preview-value" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <span style={{ fontWeight: 800 }}>
+                      {categoryIcons[analysis.category]} {categoryLabel(analysis.category)} ({analysis.subcategory})
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem', fontWeight: 800, background: '#eff6ff', borderColor: '#93c5fd', color: '#1e40af' }}
+                      onClick={() => setShowCategorySelectModal(true)}
+                    >
+                      ✏️ {bilingual('श्रेणी बदलें', 'Change Category')}
+                    </button>
+                  </div>
+                  {isManualOverride && (
+                    <span style={{ fontSize: '0.7rem', color: '#b45309', background: '#fef3c7', padding: '1px 7px', borderRadius: 4, border: '1px solid #fde68a', fontWeight: 700 }}>
+                      ⚠️ {bilingual('नागरिक द्वारा मैन्युअल संशोधित (Manual Override)', 'Citizen Manual Override')}
+                    </span>
+                  )}
                 </span>
               </div>
               <div className="preview-row">
@@ -1637,6 +1882,309 @@ export default function Report() {
                 >
                   <span>{bilingual('+ दूसरी समस्या दर्ज करें', '+ Lodge Another Issue')}</span>
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════
+            PROFESSIONAL CONFIRMATION MODAL: CATEGORY OVERRIDE ADVISORY
+           ══════════════════════════════════════════════════════════════ */}
+        {pendingCategoryOverride && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.72)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: '1rem',
+          }}>
+            <div style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              maxWidth: '560px',
+              width: '100%',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              border: '2px solid #cbd5e1',
+              overflow: 'hidden',
+              animation: 'modalFadeIn 0.2s ease-out',
+            }}>
+              {/* Header */}
+              <div style={{
+                background: 'linear-gradient(135deg, #0b3a6d 0%, #1e40af 100%)',
+                color: '#ffffff',
+                padding: '1.25rem 1.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div style={{ padding: '0.45rem', background: 'rgba(255,255,255,0.15)', borderRadius: '50%' }}>
+                    <AlertTriangle size={24} color="#fbbf24" />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.12rem', fontWeight: 800, color: '#ffffff' }}>
+                      {bilingual('⚠️ श्रेणी परिवर्तन की पुष्टि करें', '⚠️ Confirm Category Override')}
+                    </h3>
+                    <p style={{ margin: 0, fontSize: '0.74rem', color: '#bfdbfe' }}>
+                      {bilingual('रीवा नगर निगम — AI विज़न बनाम नागरिक चयन', 'Rewa Nagar Nigam — AI Vision vs Manual Selection')}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPendingCategoryOverride(null)}
+                  style={{ background: 'none', border: 'none', color: '#ffffff', cursor: 'pointer', padding: '0.25rem' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: '1.4rem' }}>
+                <p style={{ margin: '0 0 1rem', fontSize: '0.88rem', color: '#334155', lineHeight: 1.5 }}>
+                  {bilingual(
+                    'रीवा नगर निगम AI विज़न सिस्टम ने आपके द्वारा संलग्न फोटो साक्ष्य का विश्लेषण करके इस समस्या की स्वतः पहचान की है। क्या आप इसे बदलना चाहते हैं?',
+                    'Rewa Municipal AI Vision System analyzed your uploaded photo evidence and automatically categorized this civic issue. Are you sure you wish to override it?'
+                  )}
+                </p>
+
+                {/* Comparison Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem', marginBottom: '1.15rem' }}>
+                  {/* AI Vision Card */}
+                  <div style={{
+                    background: '#f0fdf4',
+                    border: '1.5px solid #86efac',
+                    borderRadius: '10px',
+                    padding: '0.9rem',
+                    position: 'relative'
+                  }}>
+                    <span style={{
+                      position: 'absolute',
+                      top: '-10px',
+                      right: '12px',
+                      background: '#15803d',
+                      color: '#ffffff',
+                      fontSize: '0.68rem',
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: 10,
+                    }}>
+                      ✓ {bilingual('AI विज़न पहचान (अनुशंसित)', 'AI Vision (Recommended)')}
+                    </span>
+                    <div style={{ fontSize: '0.78rem', color: '#166534', fontWeight: 800, marginBottom: '0.35rem' }}>
+                      🤖 {bilingual('AI द्वारा स्वतः चयनित:', 'AI Auto-Detected:')}
+                    </div>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.25rem' }}>
+                      {categoryIcons[aiVisionResult?.detected_category || 'Waste Management']} {categoryLabel(aiVisionResult?.detected_category || 'Waste Management')}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: 700, marginBottom: '0.4rem' }}>
+                      ● {bilingual(`विश्वास: ${Math.round((aiVisionResult?.confidence || 0.94) * 100)}%`, `Confidence: ${Math.round((aiVisionResult?.confidence || 0.94) * 100)}%`)}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#475569', lineHeight: 1.4, background: '#ffffff', padding: '0.45rem', borderRadius: 6, border: '1px solid #bbf7d0' }}>
+                      👁️ {lang === 'hi' ? aiVisionResult?.visual_summary_hi : aiVisionResult?.visual_summary_en}
+                    </div>
+                  </div>
+
+                  {/* Manual Selection Card */}
+                  <div style={{
+                    background: '#fef3c7',
+                    border: '1.5px solid #fcd34d',
+                    borderRadius: '10px',
+                    padding: '0.9rem',
+                    position: 'relative'
+                  }}>
+                    <span style={{
+                      position: 'absolute',
+                      top: '-10px',
+                      right: '12px',
+                      background: '#b45309',
+                      color: '#ffffff',
+                      fontSize: '0.68rem',
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: 10,
+                    }}>
+                      ⚠️ {bilingual('आपका मैन्युअल चयन', 'Your Manual Choice')}
+                    </span>
+                    <div style={{ fontSize: '0.78rem', color: '#92400e', fontWeight: 800, marginBottom: '0.35rem' }}>
+                      👤 {bilingual('नई चुनी गई श्रेणी:', 'New Category Requested:')}
+                    </div>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.25rem' }}>
+                      {categoryIcons[pendingCategoryOverride.targetCategory]} {categoryLabel(pendingCategoryOverride.targetCategory)}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#92400e', fontWeight: 700, marginBottom: '0.4rem' }}>
+                      🏛️ {bilingual('नया विभाग:', 'Target Department:')} {bilingual(categoryRoutingDetails[pendingCategoryOverride.targetCategory].departmentHi, categoryRoutingDetails[pendingCategoryOverride.targetCategory].departmentEn)}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#475569', lineHeight: 1.4, background: '#ffffff', padding: '0.45rem', borderRadius: 6, border: '1px solid #fde68a' }}>
+                      ⏱️ {bilingual(`अपेक्षित निवारण SLA: ${categoryRoutingDetails[pendingCategoryOverride.targetCategory].slaHours} घंटे`, `Resolution SLA: ${categoryRoutingDetails[pendingCategoryOverride.targetCategory].slaHours} Hours`)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Administrative Advisory */}
+                <div style={{
+                  background: '#f8fafc',
+                  borderLeft: '4px solid #2563eb',
+                  padding: '0.75rem 1rem',
+                  borderRadius: '0 8px 8px 0',
+                  marginBottom: '1.25rem',
+                  fontSize: '0.8rem',
+                  color: '#1e293b',
+                  lineHeight: 1.5
+                }}>
+                  <strong>📋 {bilingual('प्रशासनिक प्रभाव (Administrative Advisory):', 'Administrative Routing Notice:')}</strong><br />
+                  {bilingual(
+                    `श्रेणी बदलने पर यह शिकायत ${categoryRoutingDetails[pendingCategoryOverride.targetCategory].departmentHi} को स्थानांतरित होगी, जिससे जोनल फील्ड टीम का आवंटन व कार्रवाई बदल जाएगी।`,
+                    `Changing category will reroute this complaint to ${categoryRoutingDetails[pendingCategoryOverride.targetCategory].departmentEn}, altering field team dispatch.`
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{
+                      background: '#15803d',
+                      borderColor: '#166534',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      fontWeight: 800
+                    }}
+                    onClick={cancelCategoryOverride}
+                  >
+                    <Sparkles size={16} color="#ffffff" />
+                    <span>
+                      {bilingual(
+                        `🤖 AI पहचान रखें (${categoryLabel(aiVisionResult?.detected_category || 'Waste Management')})`,
+                        `Keep AI Vision (${categoryLabel(aiVisionResult?.detected_category || 'Waste Management')})`
+                      )}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{
+                      borderColor: '#cbd5e1',
+                      color: '#0f172a',
+                      fontWeight: 700
+                    }}
+                    onClick={confirmCategoryOverride}
+                  >
+                    <span>
+                      {bilingual(
+                        `✓ हाँ, मेरी श्रेणी लागू करें (${categoryLabel(pendingCategoryOverride.targetCategory)})`,
+                        `Confirm & Change to ${categoryLabel(pendingCategoryOverride.targetCategory)}`
+                      )}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════
+            CATEGORY SELECTOR MODAL (FOR PREVIEW STEP)
+           ══════════════════════════════════════════════════════════════ */}
+        {showCategorySelectModal && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99998,
+            padding: '1rem',
+          }}>
+            <div style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              maxWidth: '520px',
+              width: '100%',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+              border: '1.5px solid #cbd5e1',
+              overflow: 'hidden',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              <div style={{ padding: '1.15rem 1.4rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+                <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0b3a6d' }}>
+                  {bilingual('रीवा नगर निगम — श्रेणी चुनें', 'Select Municipal Grievance Category')}
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setShowCategorySelectModal(false)}
+                  style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '0.2rem' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div style={{ padding: '1rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {allCategories.map((cat) => {
+                  const isCurrent = (analysis?.category === cat) || (selectedCategory === cat);
+                  const isAiChoice = aiVisionResult?.detected_category === cat;
+                  const routing = categoryRoutingDetails[cat];
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => handleManualCategorySelect(cat)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.75rem 1rem',
+                        borderRadius: '10px',
+                        border: isCurrent ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                        background: isCurrent ? '#eff6ff' : '#ffffff',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                        <span style={{ fontSize: '1.35rem' }}>{categoryIcons[cat]}</span>
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: '0.92rem', color: isCurrent ? '#1d4ed8' : '#0f172a' }}>
+                            {categoryLabel(cat)}
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                            {bilingual(routing.departmentHi, routing.departmentEn)}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        {isAiChoice && (
+                          <span style={{ fontSize: '0.68rem', background: '#dcfce7', color: '#166534', fontWeight: 800, padding: '2px 7px', borderRadius: 8, border: '1px solid #86efac' }}>
+                            🤖 AI Choice
+                          </span>
+                        )}
+                        {isCurrent && (
+                          <span style={{ fontSize: '0.9rem', color: '#2563eb', fontWeight: 900 }}>
+                            ✓
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>

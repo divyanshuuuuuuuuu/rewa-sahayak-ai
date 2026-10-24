@@ -89,6 +89,14 @@ export interface ImageAnalysis {
   severity: Severity;
   possible_public_risk: boolean;
   visual_summary: string;
+  detected_category?: Category;
+  detected_subcategory?: string;
+  confidence?: number;
+  visual_summary_hi?: string;
+  visual_summary_en?: string;
+  suggested_title?: string;
+  suggested_description?: string;
+  visual_tags?: string[];
 }
 
 export interface Department {
