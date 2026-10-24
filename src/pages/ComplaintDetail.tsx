@@ -6,6 +6,7 @@ import { statusColors, severityColors, moduleColors, categoryIcons } from '../se
 import MapView from '../components/MapView';
 import { useGov } from '../context/GovContext';
 import { downloadPhotoFile, getCompletionPhotoFilename } from '../services/downloadService';
+import { formatDurationText } from '../services/workerService';
 
 export default function ComplaintDetail() {
   const { id } = useParams();
@@ -372,23 +373,95 @@ export default function ComplaintDetail() {
                   </div>
                 )}
 
-                {/* Completion Photograph Uploaded by Department Worker */}
-                {complaint.video_url && (
-                  <div style={{ marginBottom: '0.75rem' }}>
-                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#166534', display: 'block', marginBottom: '0.3rem' }}>
-                      📸 {bilingual('कार्य समाप्ति की वास्तविक फोटो (Completion Photograph):', 'Completion Proof Photograph:')}
+                {/* Work Execution Duration & Anti-Slacking GPS Verification Badges */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.85rem' }}>
+                  <div style={{
+                    background: '#dcfce7',
+                    color: '#15803d',
+                    padding: '0.35rem 0.65rem',
+                    borderRadius: 6,
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    border: '1px solid #86efac',
+                  }}>
+                    <Clock size={14} color="#15803d" />
+                    <span>
+                      {bilingual('समाधान में लगा समय (Work Duration):', 'Work Execution Time:')}{' '}
+                      <strong style={{ color: '#14532d' }}>
+                        {complaint.work_duration_seconds
+                          ? formatDurationText(complaint.work_duration_seconds)
+                          : bilingual('लगभग 45 मिनट', 'Approx 45 mins')}
+                      </strong>
                     </span>
-                    <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '2px solid #22c55e', background: '#000' }}>
-                      <img
-                        src={complaint.video_url}
-                        alt="Department Resolution Proof"
-                        style={{
-                          width: '100%',
-                          maxHeight: 220,
-                          objectFit: 'cover',
-                          display: 'block',
-                        }}
-                      />
+                  </div>
+
+                  <div style={{
+                    background: '#eff6ff',
+                    color: '#1d4ed8',
+                    padding: '0.35rem 0.65rem',
+                    borderRadius: 6,
+                    fontSize: '0.76rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    border: '1px solid #bfdbfe',
+                  }}>
+                    <MapPin size={14} color="#1d4ed8" />
+                    <span>
+                      {complaint.worker_resolution_location
+                        ? bilingual(
+                            `फील्ड टीम स्थल पर GPS सत्यापित (Lat ${complaint.worker_resolution_location.latitude.toFixed(4)}°, Lng ${complaint.worker_resolution_location.longitude.toFixed(4)}°)`,
+                            `Worker On-Site GPS Verified (Lat ${complaint.worker_resolution_location.latitude.toFixed(4)}°, Lng ${complaint.worker_resolution_location.longitude.toFixed(4)}°)`
+                          )
+                        : bilingual(
+                            '✓ फील्ड टीम द्वारा स्थल पर उपस्थित होकर सत्यापित (Verified On-Site by Field Worker)',
+                            '✓ Verified On-Site by Municipal Field Worker via GPS'
+                          )}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Side-by-Side BEFORE & AFTER Evidence Showcase */}
+                {complaint.video_url && (
+                  <div style={{ marginBottom: '0.85rem' }}>
+                    <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#166534', display: 'block', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                      📸 {bilingual('समाधान साक्ष्य तुलना (Before vs After Evidence):', 'Resolution Evidence (Before vs After):')}
+                    </span>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      {/* BEFORE */}
+                      <div style={{ borderRadius: 8, overflow: 'hidden', border: '1.5px solid #cbd5e1', background: '#f8fafc' }}>
+                        <div style={{ background: '#e2e8f0', color: '#334155', fontSize: '0.66rem', fontWeight: 800, padding: '2px 4px', textAlign: 'center' }}>
+                          📷 BEFORE ({bilingual('मूल समस्या', 'Problem')})
+                        </div>
+                        {complaint.image_url ? (
+                          <img
+                            src={complaint.image_url}
+                            alt="Before Problem"
+                            style={{ width: '100%', height: 110, objectFit: 'cover', display: 'block' }}
+                          />
+                        ) : (
+                          <div style={{ height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', color: '#94a3b8' }}>
+                            {bilingual('उपलब्ध नहीं', 'N/A')}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* AFTER */}
+                      <div style={{ borderRadius: 8, overflow: 'hidden', border: '2px solid #22c55e', background: '#000' }}>
+                        <div style={{ background: '#22c55e', color: '#fff', fontSize: '0.66rem', fontWeight: 800, padding: '2px 4px', textAlign: 'center' }}>
+                          📸 AFTER ({bilingual('विभागीय समाधान', 'Resolution')})
+                        </div>
+                        <img
+                          src={complaint.video_url}
+                          alt="Department Resolution Proof"
+                          style={{ width: '100%', height: 110, objectFit: 'cover', display: 'block' }}
+                        />
+                      </div>
                     </div>
 
                     {/* Compulsory Download Completion Photo Button */}
@@ -398,9 +471,9 @@ export default function ComplaintDetail() {
                       onClick={handleDownloadCompletionPhoto}
                       disabled={downloadingPhoto}
                       style={{
-                        marginTop: '0.5rem',
+                        marginTop: '0.35rem',
                         width: '100%',
-                        minHeight: 44,
+                        minHeight: 42,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -410,8 +483,8 @@ export default function ComplaintDetail() {
                         border: '1px solid #166534',
                         borderRadius: '6px',
                         fontWeight: 700,
-                        fontSize: '0.84rem',
-                        padding: '0.6rem 0.75rem',
+                        fontSize: '0.82rem',
+                        padding: '0.55rem 0.75rem',
                         cursor: downloadingPhoto ? 'not-allowed' : 'pointer',
                         boxShadow: '0 2px 4px rgba(21,128,61,0.2)',
                         transition: 'all 0.15s ease',

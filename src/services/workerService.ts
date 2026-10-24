@@ -47,11 +47,27 @@ export interface WorkerAssignment {
   completion_note: string | null;
   resolution_note?: string | null;
   completed_by_name: string | null;
-  resolved_at: string | null;
+  resolved_at?: string | null;
+  work_duration_seconds?: number | null;
+  worker_resolution_location?: { latitude: number; longitude: number; accuracy?: number } | null;
   delay_reason?: string | null;
   submitted_at: string;
   updated_at: string;
   citizen_name: string | null;
+}
+
+export function formatDurationText(seconds?: number | null): string {
+  if (!seconds || seconds <= 0) return 'कम समय में';
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  if (hrs > 0) {
+    return `${hrs} hr ${mins} min`;
+  }
+  if (mins > 0) {
+    return `${mins} min ${secs} sec`;
+  }
+  return `${secs} sec`;
 }
 
 export interface WorkerNotification {
@@ -401,7 +417,10 @@ export async function recordWorkDelay(
 }
 
 // ─── Start Work on an Assignment ─────────────────────────────────────────────
-export async function startWork(reportId: string): Promise<{ error: string | null }> {
+export async function startWork(
+  reportId: string,
+  workerLocation?: { latitude: number; longitude: number; accuracy?: number }
+): Promise<{ error: string | null }> {
   const { profile } = await getMyWorkerProfile();
   const cleanId = (reportId || "").replace(/^#/, "").trim();
   const { assignment, error: authErr } = await getMyAssignmentById(cleanId);
@@ -421,6 +440,7 @@ export async function startWork(reportId: string): Promise<{ error: string | nul
     .from("citizen_reports")
     .update({
       current_status: "IN_PROGRESS",
+      work_started_at: now,
       updated_at: now,
     })
     .eq("id", targetId);
@@ -429,22 +449,31 @@ export async function startWork(reportId: string): Promise<{ error: string | nul
     console.warn("Supabase update error:", updateErr.message);
   }
 
+  const locMsg = workerLocation
+    ? ` [📍 कार्य स्थल उपस्थिति GPS सत्यापित: ${workerLocation.latitude.toFixed(4)}°N, ${workerLocation.longitude.toFixed(4)}°E (±${Math.round(workerLocation.accuracy || 10)}m)]`
+    : '';
+
   // 2. Insert into report_status_history
   await supabase.from("report_status_history").insert({
-    report_id: reportId,
+    report_id: targetId,
     previous_status: assignment.current_status,
     new_status: "IN_PROGRESS",
-    public_message: `${performer} (${deptName}) has started work on this complaint.`,
+    public_message: `▶ ${performer} (${deptName}) ने घटनास्थल पर कार्य प्रारंभ किया (Work Timer Started).${locMsg}`,
     changed_by_name: performer,
   });
 
   // 3. Update local store
-  updateComplaintStatus(
+  const updatedComplaint = updateComplaintStatus(
     reportId,
     "IN_PROGRESS",
-    `${performer} has started on-site resolution work.`,
+    `${performer} ने घटनास्थल पर कार्य प्रारंभ किया।${locMsg}`,
     performer
   );
+  if (updatedComplaint) {
+    updatedComplaint.work_started_at = now;
+  }
+  assignment.work_started_at = now;
+  assignment.current_status = "IN_PROGRESS";
 
   // 4. Audit logging
   logAudit({
@@ -452,11 +481,12 @@ export async function startWork(reportId: string): Promise<{ error: string | nul
     department_name: deptName,
     complaint_ref: assignment.reference_number,
     performed_by: performer,
-    details: `Work started on complaint #${assignment.reference_number} (${assignment.title}).`,
+    details: `Work started on #${assignment.reference_number}. Timer started at ${now}.${locMsg}`,
   });
 
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("rewa_store_updated"));
+    window.dispatchEvent(new CustomEvent("rewa_worker_tasks_updated"));
   }
 
   return { error: null };
@@ -466,7 +496,8 @@ export async function startWork(reportId: string): Promise<{ error: string | nul
 export async function submitCompletedWork(
   reportId: string,
   completionPhoto: File,
-  completionNote: string
+  completionNote: string,
+  workerLocation?: { latitude: number; longitude: number; accuracy?: number }
 ): Promise<{ error: string | null }> {
   const { profile } = await getMyWorkerProfile();
   const cleanId = (reportId || "").replace(/^#/, "").trim();
@@ -516,6 +547,15 @@ export async function submitCompletedWork(
   const fullCompletionUrl = getImageUrl(completionPath, "completion-images");
   const targetId = assignment.id || cleanId;
 
+  // Calculate elapsed duration
+  const startTime = assignment.work_started_at || assignment.submitted_at || now;
+  const durationSec = Math.max(1, Math.round((new Date(now).getTime() - new Date(startTime).getTime()) / 1000));
+  const durationStr = formatDurationText(durationSec);
+
+  const locMsg = workerLocation
+    ? ` • 📍 ऑन-साइट उपस्थिति GPS सत्यापित (${workerLocation.latitude.toFixed(4)}°N, ${workerLocation.longitude.toFixed(4)}°E, ±${Math.round(workerLocation.accuracy || 8)}m)`
+    : '';
+
   // 5. Update citizen_reports in Supabase
   const { error: updateErr } = await supabase
     .from("citizen_reports")
@@ -533,12 +573,12 @@ export async function submitCompletedWork(
     console.warn("Could not update citizen_reports in Supabase:", updateErr.message);
   }
 
-  // 6. Record in report_status_history (Creates Official Department Response)
+  // 6. Record in report_status_history (Creates Official Department Response with Before/After link & Timer duration)
   await supabase.from("report_status_history").insert({
     report_id: targetId,
     previous_status: assignment.current_status,
     new_status: "RESOLVED",
-    public_message: `विभागीय कार्य पूर्ण: ${noteClean}`,
+    public_message: `विभागीय कार्य पूर्ण: ${noteClean} [⏱️ कुल कार्य समय: ${durationStr}]${locMsg}`,
     changed_by_name: performer,
   });
 
@@ -554,6 +594,20 @@ export async function submitCompletedWork(
     updatedComplaint.completion_note = noteClean;
     updatedComplaint.completed_by_name = performer;
     updatedComplaint.resolved_at = now;
+    updatedComplaint.work_started_at = startTime;
+    updatedComplaint.work_duration_seconds = durationSec;
+    if (workerLocation) {
+      updatedComplaint.worker_resolution_location = workerLocation;
+    }
+  }
+
+  assignment.current_status = "RESOLVED";
+  assignment.completion_image_path = completionPath;
+  assignment.completion_note = noteClean;
+  assignment.resolved_at = now;
+  assignment.work_duration_seconds = durationSec;
+  if (workerLocation) {
+    assignment.worker_resolution_location = workerLocation;
   }
 
   const resolvingDept = profile?.department_name || assignment.assigned_department_name || "जल आपूर्ति एवं जल निकासी विभाग";
@@ -564,7 +618,7 @@ export async function submitCompletedWork(
     department_name: resolvingDept,
     complaint_ref: assignment.reference_number,
     performed_by: performer,
-    details: `Mandatory completion photo uploaded and note submitted for #${assignment.reference_number}.`,
+    details: `Mandatory completion photo uploaded and note submitted for #${assignment.reference_number}. Execution Time: ${durationStr}.${locMsg}`,
   });
 
   logAudit({
@@ -572,11 +626,12 @@ export async function submitCompletedWork(
     department_name: resolvingDept,
     complaint_ref: assignment.reference_number,
     performed_by: performer,
-    details: `Complaint #${assignment.reference_number} automatically resolved.`,
+    details: `Complaint #${assignment.reference_number} automatically resolved in ${durationStr}.`,
   });
 
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("rewa_store_updated"));
+    window.dispatchEvent(new CustomEvent("rewa_worker_tasks_updated"));
   }
 
   return { error: null };
