@@ -89,12 +89,12 @@ export default function Home() {
           <div className="hero-actions">
             <Link to="/report" className="btn btn-saffron btn-lg">
               <Sparkles size={18} />
-              <span>{bilingual('1-टैप में शिकायत दर्ज करें', 'Lodge Complaint (1-Tap)')}</span>
+              <span>{bilingual('नागरिक समस्या दर्ज करें', 'Report a Civic Issue')}</span>
               <ArrowRight size={18} />
             </Link>
             <Link to="/complaints" className="btn btn-secondary btn-lg">
-              <Eye size={18} />
-              <span>{bilingual('सभी जन-शिकायतें देखें', 'View Public Grievances')}</span>
+              <Search size={18} />
+              <span>{bilingual('शिकायत की स्थिति ट्रैक करें', 'Track My Complaint')}</span>
             </Link>
           </div>
 

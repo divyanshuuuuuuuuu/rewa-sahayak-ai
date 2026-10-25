@@ -1,26 +1,21 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Shield, User, Eye, EyeOff, Mail, Lock, UserPlus, KeyRound, LogOut } from "lucide-react";
+import { Shield, Eye, EyeOff, Mail, Lock, KeyRound, LogOut } from "lucide-react";
 import { CivicInsignia } from "../components/Emblem";
 import { useGov } from "../context/GovContext";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../services/supabase";
 
-type LoginTab = "signin" | "signup";
-
 export default function Login() {
   const navigate = useNavigate();
   const { bilingual } = useGov();
-  const { user, profile, isAdmin, signIn, signUp, signOut } = useAuth();
+  const { user, profile, isAdmin, signIn, signOut } = useAuth();
 
-  const [tab, setTab] = useState<LoginTab>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,36 +57,6 @@ export default function Login() {
     navigate("/");
   };
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !password || !fullName) {
-      setError("All fields are required.");
-      return;
-    }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
-    setLoading(true);
-    setError("");
-
-    const { error: err } = await signUp(email, password, fullName);
-    setLoading(false);
-
-    if (err) {
-      setError(err);
-      return;
-    }
-
-    setSuccessMsg(
-      bilingual(
-        "खाता सफलतापूर्वक बनाया गया! आप सीधे साइन इन कर सकते हैं।",
-        "Account created successfully! You can now sign in."
-      )
-    );
-    setTab("signin");
-  };
-
   const fillAdminCredentials = () => {
     setEmail("admin@rewa.gov.in");
     setPassword("Admin@Rewa2026!");
@@ -106,14 +71,46 @@ export default function Login() {
             <CivicInsignia size={54} />
           </div>
           <span className="gov-seal-badge" style={{ marginBottom: "0.5rem" }}>
-            {bilingual("रीवा सहायक AI • नागरिक व प्रशासनिक लॉगिन", "Rewa Sahayak AI • Civic Portal Access")}
+            <Shield size={13} color="var(--gov-navy)" />
+            {bilingual("रीवा नगर निगम • प्रशासनिक अधिकारी पोर्टल", "Rewa Municipal Corp • Officer & Admin Access")}
           </span>
           <h1 style={{ fontSize: "1.35rem", fontWeight: 800, color: "var(--gov-navy)", marginBottom: "0.2rem" }}>
-            {bilingual("ई-पोर्टल लॉगिन", "Civic Portal Login")}
+            {bilingual("अधिकारी / एडमिन लॉगिन", "Officer & Administrator Login")}
           </h1>
           <p style={{ color: "#64748b", fontSize: "0.82rem" }}>
-            Rewa Sahayak AI — Citizen &amp; Officer Access
+            {bilingual("नगर निगम नियंत्रण कक्ष व विभागीय अधिकारी पहुंच", "Municipal Control Room & Departmental Officer Access")}
           </p>
+        </div>
+
+        {/* Citizen Notice: Direct Public Access Without Login */}
+        <div style={{
+          background: "#f0fdf4",
+          border: "1px solid #bbf7d0",
+          borderRadius: 8,
+          padding: "0.75rem 0.9rem",
+          marginBottom: "1.25rem",
+          textAlign: "left",
+          fontSize: "0.82rem",
+          color: "#166534"
+        }}>
+          <div style={{ fontWeight: 700, marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+            <span>ℹ️</span>
+            <span>{bilingual("नागरिकों हेतु सार्वजनिक सूचना:", "Notice for Citizens:")}</span>
+          </div>
+          <p style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", color: "#14532d", lineHeight: 1.45 }}>
+            {bilingual(
+              "नागरिकों को शिकायत दर्ज करने या स्थिति जांचने के लिए किसी खाते अथवा लॉगिन की आवश्यकता नहीं है।",
+              "Citizens do not require an account or login to lodge grievances or track complaint status."
+            )}
+          </p>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <Link to="/report" className="btn btn-primary btn-sm" style={{ fontSize: "0.72rem", padding: "0.25rem 0.6rem", background: "#15803d", borderColor: "#166534" }}>
+              {bilingual("समस्या दर्ज करें →", "Report a Civic Issue →")}
+            </Link>
+            <Link to="/complaints" className="btn btn-secondary btn-sm" style={{ fontSize: "0.72rem", padding: "0.25rem 0.6rem" }}>
+              {bilingual("शिकायत ट्रैक करें →", "Track My Complaint →")}
+            </Link>
+          </div>
         </div>
 
         {/* If user is already logged in, show current session banner */}
@@ -124,7 +121,7 @@ export default function Login() {
                 ✓ {bilingual("वर्तमान में लॉगिन हैं:", "Currently Logged In:")}
               </span>
               <span className="badge" style={{ background: isAdmin ? "#dbeafe" : "#f1f5f9", color: isAdmin ? "#1e40af" : "#475569" }}>
-                {profile?.role?.toUpperCase() || "CITIZEN"}
+                {profile?.role?.toUpperCase() || "ADMIN"}
               </span>
             </div>
             <div style={{ fontSize: "0.85rem", color: "#1e293b", fontWeight: 600 }}>
@@ -174,32 +171,6 @@ export default function Login() {
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="tabs" style={{ marginBottom: "1.5rem" }}>
-          <button
-            type="button"
-            className={`tab ${tab === "signin" ? "active" : ""}`}
-            onClick={() => {
-              setTab("signin");
-              setError("");
-              setSuccessMsg("");
-            }}
-          >
-            <User size={14} /> {bilingual("साइन इन", "Sign In")}
-          </button>
-          <button
-            type="button"
-            className={`tab ${tab === "signup" ? "active" : ""}`}
-            onClick={() => {
-              setTab("signup");
-              setError("");
-              setSuccessMsg("");
-            }}
-          >
-            <UserPlus size={14} /> {bilingual("नागरिक पंजीकरण", "Register")}
-          </button>
-        </div>
-
         {error && (
           <div
             style={{
@@ -216,154 +187,65 @@ export default function Login() {
             ⚠️ {error}
           </div>
         )}
-        {successMsg && (
-          <div
-            style={{
-              background: "#f0fdf4",
-              border: "1px solid #bbf7d0",
-              borderRadius: 8,
-              padding: "0.75rem 1rem",
-              marginBottom: "1rem",
-              color: "#15803d",
-              fontSize: "0.85rem",
-              textAlign: "left",
-            }}
-          >
-            ✅ {successMsg}
+
+        <form onSubmit={handleSignIn} style={{ display: "flex", flexDirection: "column", gap: "0.85rem", textAlign: "left" }}>
+          <div>
+            <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "#334155", display: "block", marginBottom: "0.35rem" }}>
+              <Mail size={13} style={{ verticalAlign: "middle", marginRight: 4 }} />
+              {bilingual("विभागीय ईमेल पता", "Official Email Address")}
+            </label>
+            <input
+              className="form-input"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="officer@rewa.gov.in"
+              required
+            />
           </div>
-        )}
+          <div>
+            <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "#334155", display: "block", marginBottom: "0.35rem" }}>
+              <Lock size={13} style={{ verticalAlign: "middle", marginRight: 4 }} />
+              {bilingual("पासवर्ड", "Password")}
+            </label>
+            <div style={{ position: "relative" }}>
+              <input
+                className="form-input"
+                type={showPwd ? "text" : "password"}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                style={{ paddingRight: "2.5rem" }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPwd(v => !v)}
+                style={{
+                  position: "absolute",
+                  right: "0.75rem",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#64748b",
+                }}
+              >
+                {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
 
-        {tab === "signin" ? (
-          <form onSubmit={handleSignIn} style={{ display: "flex", flexDirection: "column", gap: "0.85rem", textAlign: "left" }}>
-            <div>
-              <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "#334155", display: "block", marginBottom: "0.35rem" }}>
-                <Mail size={13} style={{ verticalAlign: "middle", marginRight: 4 }} />
-                {bilingual("ईमेल पता", "Email Address")}
-              </label>
-              <input
-                className="form-input"
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "#334155", display: "block", marginBottom: "0.35rem" }}>
-                <Lock size={13} style={{ verticalAlign: "middle", marginRight: 4 }} />
-                {bilingual("पासवर्ड", "Password")}
-              </label>
-              <div style={{ position: "relative" }}>
-                <input
-                  className="form-input"
-                  type={showPwd ? "text" : "password"}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  style={{ paddingRight: "2.5rem" }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPwd(v => !v)}
-                  style={{
-                    position: "absolute",
-                    right: "0.75rem",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "#64748b",
-                  }}
-                >
-                  {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="btn btn-primary btn-lg"
-              disabled={loading}
-              style={{ width: "100%", justifyContent: "center", background: "#0b3a6d", marginTop: "0.25rem" }}
-            >
-              {loading ? bilingual("साइन इन हो रहा है...", "Signing in...") : bilingual("साइन इन करें", "Sign In")}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleSignUp} style={{ display: "flex", flexDirection: "column", gap: "0.85rem", textAlign: "left" }}>
-            <div>
-              <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "#334155", display: "block", marginBottom: "0.35rem" }}>
-                {bilingual("पूरा नाम", "Full Name")}
-              </label>
-              <input
-                className="form-input"
-                type="text"
-                value={fullName}
-                onChange={e => setFullName(e.target.value)}
-                placeholder={bilingual("आपका पूरा नाम", "Your full name")}
-                required
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "#334155", display: "block", marginBottom: "0.35rem" }}>
-                <Mail size={13} style={{ verticalAlign: "middle", marginRight: 4 }} />
-                {bilingual("ईमेल पता", "Email Address")}
-              </label>
-              <input
-                className="form-input"
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "#334155", display: "block", marginBottom: "0.35rem" }}>
-                <Lock size={13} style={{ verticalAlign: "middle", marginRight: 4 }} />
-                {bilingual("पासवर्ड (न्यूनतम 6 अक्षर)", "Password (min 6 chars)")}
-              </label>
-              <div style={{ position: "relative" }}>
-                <input
-                  className="form-input"
-                  type={showPwd ? "text" : "password"}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  style={{ paddingRight: "2.5rem" }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPwd(v => !v)}
-                  style={{
-                    position: "absolute",
-                    right: "0.75rem",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "#64748b",
-                  }}
-                >
-                  {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
-            <button
-              type="submit"
-              className="btn btn-primary btn-lg"
-              disabled={loading}
-              style={{ width: "100%", justifyContent: "center", background: "#0b3a6d", marginTop: "0.25rem" }}
-            >
-              {loading ? bilingual("खाता बन रहा है...", "Creating account...") : bilingual("खाता बनाएं", "Create Account")}
-            </button>
-          </form>
-        )}
+          <button
+            type="submit"
+            className="btn btn-primary btn-lg"
+            disabled={loading}
+            style={{ width: "100%", justifyContent: "center", background: "#0b3a6d", marginTop: "0.25rem" }}
+          >
+            {loading ? bilingual("साइन इन हो रहा है...", "Signing in...") : bilingual("अधिकारी साइन इन करें", "Officer Sign In")}
+          </button>
+        </form>
 
         {/* Demo Officer One-Click Quick Fill Helper */}
         <div

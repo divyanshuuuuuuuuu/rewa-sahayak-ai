@@ -287,12 +287,12 @@ export default function Layout() {
               aria-haspopup="true"
               aria-label="Account menu"
             >
-              <UserIcon size={14} color="#93c5fd" />
+              {user ? <UserIcon size={14} color="#93c5fd" /> : <Shield size={14} color="#93c5fd" />}
               <span>
                 {user ? (
                   profile?.full_name || user.email?.split('@')[0]
                 ) : (
-                  bilingual('मेरा खाता', 'My Account')
+                  bilingual('विभागीय लॉगिन', 'Staff Login')
                 )}
               </span>
               {user && (
@@ -460,31 +460,9 @@ export default function Layout() {
                   </div>
                 ) : (
                   <div style={{ padding: '0.4rem' }}>
-                    <div style={{ padding: '0.5rem 0.75rem 0.35rem', fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
-                      {bilingual('खाता चुनें (पोर्टल पहुंच)', 'Select Portal Login')}
+                    <div style={{ padding: '0.5rem 0.75rem 0.35rem', fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      {bilingual('विभागीय एवं प्रशासनिक पहुंच', 'Municipal Staff & Officer Access')}
                     </div>
-
-                    <Link
-                      to="/login"
-                      onClick={() => setAccountMenuOpen(false)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.6rem',
-                        padding: '0.6rem 0.75rem',
-                        fontSize: '0.84rem',
-                        color: '#0f172a',
-                        textDecoration: 'none',
-                        borderRadius: '6px',
-                        borderBottom: '1px solid #f1f5f9',
-                      }}
-                    >
-                      <UserIcon size={16} color="#0b3a6d" />
-                      <div>
-                        <div style={{ fontWeight: 700 }}>{bilingual('नागरिक लॉगिन / पंजीयन', 'Citizen Login / Register')}</div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{bilingual('शिकायतें ट्रैक करें व स्थिति जांचें', 'Track status & lodge grievances')}</div>
-                      </div>
-                    </Link>
 
                     <Link
                       to="/worker-login"
@@ -493,7 +471,7 @@ export default function Layout() {
                         display: 'flex',
                         alignItems: 'center',
                         gap: '0.6rem',
-                        padding: '0.6rem 0.75rem',
+                        padding: '0.65rem 0.75rem',
                         fontSize: '0.84rem',
                         color: '#0f172a',
                         textDecoration: 'none',
@@ -515,7 +493,7 @@ export default function Layout() {
                         display: 'flex',
                         alignItems: 'center',
                         gap: '0.6rem',
-                        padding: '0.6rem 0.75rem',
+                        padding: '0.65rem 0.75rem',
                         fontSize: '0.84rem',
                         color: '#0f172a',
                         textDecoration: 'none',
@@ -693,10 +671,9 @@ export default function Layout() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                  <Link to="/login" className="mobile-drawer-link" onClick={() => setMobileMenuOpen(false)}>
-                    <UserIcon size={16} color="#0b3a6d" />
-                    <span>{bilingual('नागरिक लॉगिन / पंजीयन', 'Citizen Login / Register')}</span>
-                  </Link>
+                  <div style={{ padding: '0.25rem 0.5rem', fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    {bilingual('विभागीय एवं प्रशासनिक पहुंच', 'Staff & Department Access')}
+                  </div>
                   <Link to="/worker-login" className="mobile-drawer-link" style={{ background: '#fffbeb', border: '1px solid #fde68a' }} onClick={() => setMobileMenuOpen(false)}>
                     <HardHat size={16} color="#d97706" />
                     <span style={{ fontWeight: 700, color: '#92400e' }}>{bilingual('विभागीय कर्मी पोर्टल', 'Field Worker Portal')}</span>
