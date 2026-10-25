@@ -17,11 +17,13 @@ export type Category =
 
 export interface CivicMedia {
   id: string;
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'audio';
   url: string;
   name: string;
   size?: number;
   duration?: number;
+  mime_type?: string;
+  public_consent?: boolean;
 }
 
 export interface Complaint {
@@ -43,6 +45,10 @@ export interface Complaint {
   address: string;
   image_url: string | null;
   video_url?: string | null;
+  audio_url?: string | null;
+  audio_duration?: number | null;
+  audio_mime_type?: string | null;
+  public_audio_consent?: boolean;
   media?: CivicMedia[];
   voice_transcript: string | null;
   ai_summary: string;

@@ -5,7 +5,7 @@ import { demoUsers } from '../data/demoData';
 import { v4 as uuidv4 } from 'uuid';
 import { getEvidenceForCategory } from './evidenceSvg';
 import { supabase } from './supabase';
-import { getImageUrl } from './supabaseStore';
+import { getImageUrl, getAudioUrl } from './supabaseStore';
 
 const COMPLAINTS_KEY = 'rewa_complaints';
 const USER_KEY = 'rewa_current_user';
@@ -22,6 +22,12 @@ export function dbReportToComplaint(r: any, history: any[] = []): Complaint {
         ? r.completion_image_path
         : getImageUrl(r.completion_image_path, 'completion-images'))
     : null;
+
+  const audio_url = r.voice_audio_path
+    ? (r.voice_audio_path.startsWith('http') || r.voice_audio_path.startsWith('blob:') || r.voice_audio_path.startsWith('data:')
+        ? r.voice_audio_path
+        : getAudioUrl(r.voice_audio_path))
+    : (r.audio_url || null);
 
   const updates: ComplaintUpdate[] = (history && history.length > 0)
     ? history.map((h: any) => ({
@@ -62,7 +68,14 @@ export function dbReportToComplaint(r: any, history: any[] = []): Complaint {
     address: r.location_description || r.area_or_ward || 'रीवा',
     image_url,
     video_url,
-    media: image_url ? [{ id: 'm1', type: 'image', url: image_url, name: 'Evidence Photo' }] : [],
+    audio_url,
+    audio_duration: r.voice_audio_duration ?? r.audio_duration ?? null,
+    audio_mime_type: r.voice_audio_mime_type ?? r.audio_mime_type ?? null,
+    public_audio_consent: r.public_audio_consent !== false,
+    media: [
+      ...(image_url ? [{ id: 'm1', type: 'image' as const, url: image_url, name: 'Evidence Photo' }] : []),
+      ...(audio_url ? [{ id: 'm-audio', type: 'audio' as const, url: audio_url, name: 'Voice Complaint', duration: r.voice_audio_duration }] : []),
+    ],
     voice_transcript: r.voice_transcript || null,
     ai_summary: r.ai_summary || r.description,
     ai_confidence: r.ai_confidence || 0.92,
@@ -333,29 +346,50 @@ export function createComplaint(
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
-      const { data, error } = await supabase
+      const insertPayload: any = {
+        title: newComplaint.title,
+        description: newComplaint.description,
+        category: newComplaint.category,
+        subcategory: newComplaint.subcategory || null,
+        module: newComplaint.module,
+        severity: newComplaint.severity || 'MEDIUM',
+        current_status: 'SUBMITTED',
+        citizen_name: newComplaint.citizen_name || 'नागरिक (रीवा)',
+        submitted_by: user?.id ?? null,
+        location_description: newComplaint.address,
+        latitude: newComplaint.latitude,
+        longitude: newComplaint.longitude,
+        before_image_path: newComplaint.image_url,
+        ai_summary: newComplaint.ai_summary,
+        ai_confidence: newComplaint.ai_confidence,
+        voice_transcript: newComplaint.voice_transcript,
+        voice_audio_path: newComplaint.audio_url || null,
+        voice_audio_duration: newComplaint.audio_duration || null,
+        voice_audio_mime_type: newComplaint.audio_mime_type || null,
+        public_audio_consent: newComplaint.public_audio_consent !== false,
+        public_visibility: true, // Auto-visible on public tracker
+      };
+
+      let { data, error } = await supabase
         .from('citizen_reports')
-        .insert({
-          title: newComplaint.title,
-          description: newComplaint.description,
-          category: newComplaint.category,
-          subcategory: newComplaint.subcategory || null,
-          module: newComplaint.module,
-          severity: newComplaint.severity || 'MEDIUM',
-          current_status: 'SUBMITTED',
-          citizen_name: newComplaint.citizen_name || 'नागरिक (रीवा)',
-          submitted_by: user?.id ?? null,
-          location_description: newComplaint.address,
-          latitude: newComplaint.latitude,
-          longitude: newComplaint.longitude,
-          before_image_path: newComplaint.image_url,
-          ai_summary: newComplaint.ai_summary,
-          ai_confidence: newComplaint.ai_confidence,
-          voice_transcript: newComplaint.voice_transcript,
-          public_visibility: true, // Auto-visible on public tracker
-        })
+        .insert(insertPayload)
         .select()
         .single();
+
+      // If database table citizen_reports lacks the audio columns before migration runs, retry without them safely
+      if (error && error.message.toLowerCase().includes('column') && error.message.toLowerCase().includes('does not exist')) {
+        delete insertPayload.voice_audio_path;
+        delete insertPayload.voice_audio_duration;
+        delete insertPayload.voice_audio_mime_type;
+        delete insertPayload.public_audio_consent;
+        const retry = await supabase
+          .from('citizen_reports')
+          .insert(insertPayload)
+          .select()
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (!error && data) {
         // Record status history

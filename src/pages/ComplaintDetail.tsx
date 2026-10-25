@@ -7,6 +7,7 @@ import MapView from '../components/MapView';
 import { useGov } from '../context/GovContext';
 import { downloadPhotoFile, getCompletionPhotoFilename } from '../services/downloadService';
 import { formatDurationText } from '../services/workerService';
+import VoiceAudioPlayer from '../components/VoiceAudioPlayer';
 
 export default function ComplaintDetail() {
   const { id } = useParams();
@@ -344,6 +345,19 @@ export default function ComplaintDetail() {
                 <p style={{ fontSize: '0.75rem', color: '#15803d', marginTop: '0.65rem', fontWeight: 600, marginBottom: 0 }}>
                   ✓ {bilingual('भू-निर्देशांक (GPS) एवं वास्तविक स्थल टाइमस्टैम्प रीवा नगर निगम द्वारा सत्यापित', 'GPS coordinates & real-time timestamp verified by Rewa Nagar Nigam')}
                 </p>
+              </div>
+            )}
+
+            {/* Saved Citizen Audio Recording (with Public Consent Check) */}
+            {complaint.audio_url && (
+              <div style={{ marginBottom: '1.25rem' }}>
+                <VoiceAudioPlayer
+                  audioUrl={complaint.audio_url}
+                  duration={complaint.audio_duration}
+                  publicConsent={complaint.public_audio_consent !== false}
+                  canPlayAuthorized={false}
+                  title={bilingual('नागरिक वॉइस रिकॉर्डिंग (Citizen Audio Recording)', 'Citizen Voice Recording')}
+                />
               </div>
             )}
 

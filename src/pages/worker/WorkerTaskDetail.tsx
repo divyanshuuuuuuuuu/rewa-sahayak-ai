@@ -13,6 +13,8 @@ import {
   workerStatusColors, workerStatusLabels, formatDurationText, type WorkerAssignment
 } from "../../services/workerService";
 import { downloadPhotoFile, getCompletionPhotoFilename } from "../../services/downloadService";
+import VoiceAudioPlayer from "../../components/VoiceAudioPlayer";
+import { getAudioUrl } from "../../services/supabaseStore";
 
 function StatusBadge({ status }: { status: string }) {
   const color = workerStatusColors[status] ?? "#64748b";
@@ -708,6 +710,23 @@ export default function WorkerTaskDetail() {
             {assignment.description || "नागरिक द्वारा कोई अतिरिक्त विवरण नहीं दिया गया।"}
           </p>
         </div>
+
+        {/* Citizen Voice Recording Player for Assigned Field Worker */}
+        {assignment.voice_audio_path && (
+          <div style={{ marginTop: "0.75rem" }}>
+            <VoiceAudioPlayer
+              audioUrl={
+                assignment.voice_audio_path.startsWith("http") || assignment.voice_audio_path.startsWith("blob:") || assignment.voice_audio_path.startsWith("data:")
+                  ? assignment.voice_audio_path
+                  : getAudioUrl(assignment.voice_audio_path)
+              }
+              duration={assignment.voice_audio_duration}
+              publicConsent={assignment.public_audio_consent !== false}
+              canPlayAuthorized={true}
+              title="नागरिक की वॉइस रिकॉर्डिंग (Citizen Audio Recording)"
+            />
+          </div>
+        )}
       </SectionCard>
 
       {/* ─── 3. WORKER / ADMIN INSTRUCTIONS (IF ANY) ───────────────── */}

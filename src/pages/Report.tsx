@@ -1,22 +1,23 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Mic, MicOff, Camera, MapPin, Send, CheckCircle2, Navigation,
   Sparkles, Printer, ArrowLeft, ShieldCheck, Video, Trash2,
-  AlertTriangle, RefreshCw, X
+  AlertTriangle, RefreshCw, X, Play, Square, Volume2, FileText, Lock, Globe, RotateCcw
 } from 'lucide-react';
 import {
   analyzeProblemDemo, analyzeImageDemo, analyzeCivicImageAsync, categoryRoutingDetails,
   type CivicVisionResult, severityColors, categoryIcons
 } from '../services/ai';
 import { createComplaint } from '../services/store';
-import { uploadReportImage, getImageUrl } from '../services/supabaseStore';
+import { uploadReportImage, getImageUrl, uploadReportAudio } from '../services/supabaseStore';
 import { getCivicVideoPosterSvg, createSampleCivicVideoBlob } from '../services/evidenceSvg';
 import type { AIAnalysis, CivicMedia, Category } from '../types';
 import MapView from '../components/MapView';
 import { CivicInsignia, CivicPrototypeBadge } from '../components/Emblem';
 import { useGov } from '../context/GovContext';
 import { reverseGeocode, forwardGeocode } from '../services/geocode';
+import VoiceAudioPlayer from '../components/VoiceAudioPlayer';
 
 type ReportStep = 'input' | 'processing' | 'preview' | 'submitted';
 
@@ -24,8 +25,20 @@ export default function Report() {
   const navigate = useNavigate();
   const { lang, bilingual, moduleLabel, categoryLabel } = useGov();
   const [step, setStep] = useState<ReportStep>('input');
+  // Two mutually exclusive input modes: 'text' (default) vs 'speak'
+  const [inputMode, setInputMode] = useState<'text' | 'speak'>('text');
+  const [pendingSwitchMode, setPendingSwitchMode] = useState<'text' | 'speak' | null>(null);
   const [text, setText] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioDuration, setAudioDuration] = useState<number>(0);
+  const [audioMimeType, setAudioMimeType] = useState<string>('audio/webm');
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [publicAudioConsent, setPublicAudioConsent] = useState(true);
+  const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+  const [audioUploadError, setAudioUploadError] = useState<string | null>(null);
   const [voiceStatus, setVoiceStatus] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [mediaList, setMediaList] = useState<CivicMedia[]>([]);
@@ -55,6 +68,22 @@ export default function Report() {
   const multiFileInputRef = useRef<HTMLInputElement>(null);
   const cameraVideoInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<any>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try { mediaRecorderRef.current.stop(); } catch {}
+      }
+    };
+  }, []);
 
   // Derived media values
   const photoCount = mediaList.filter((m) => m.type === 'image').length;
@@ -226,92 +255,203 @@ export default function Report() {
     }
   };
 
-  // Voice recording
-  const startRecording = useCallback(() => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setVoiceStatus(
+  // ─── Mode Switching With Confirmation Guard ────────────────────
+  const handleModeSwitch = (target: 'text' | 'speak') => {
+    if (target === inputMode) return;
+    if (isRecordingAudio) {
+      stopAudioRecording();
+    }
+    // If switching from text to speak, and citizen has typed substantial text, ask confirmation
+    if (inputMode === 'text' && target === 'speak' && text.trim().length > 15) {
+      setPendingSwitchMode('speak');
+      return;
+    }
+    // If switching from speak to text, and citizen has an audio recording, ask confirmation
+    if (inputMode === 'speak' && target === 'text' && audioBlob) {
+      setPendingSwitchMode('text');
+      return;
+    }
+    setInputMode(target);
+    setFieldErrors((prev) => ({ ...prev, text: undefined }));
+  };
+
+  const confirmModeSwitch = () => {
+    if (pendingSwitchMode === 'speak') {
+      setText('');
+      setSelectedQuickProblem(null);
+      setInputMode('speak');
+    } else if (pendingSwitchMode === 'text') {
+      deleteAudioRecording();
+      setInputMode('text');
+    }
+    setPendingSwitchMode(null);
+    setFieldErrors((prev) => ({ ...prev, text: undefined }));
+  };
+
+  const cancelModeSwitch = () => {
+    setPendingSwitchMode(null);
+  };
+
+  // ─── Genuine Audio Recording (MediaRecorder API) ───────────────
+  const startAudioRecording = async () => {
+    setAudioError(null);
+    setAudioUploadError(null);
+
+    // Browser MediaDevices Check
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setAudioError(
         bilingual(
-          'माइक्रोफोन सुविधा केवल Chrome/Edge ब्राउज़र में उपलब्ध है।',
-          'Speech recognition is supported on Chrome and Edge browsers.'
+          'आपके ब्राउज़र में माइक्रोफोन रिकॉर्डिंग (MediaRecorder) समर्थित नहीं है। कृपया टेक्स्ट मोड का उपयोग करें।',
+          'Audio recording is not supported by your browser. Please use text mode.'
         )
       );
       return;
     }
-    const recognition = new SpeechRecognition();
-    recognition.lang = lang === 'hi' ? 'hi-IN' : 'en-IN';
-    recognition.interimResults = true;
-    recognition.continuous = true;
-    recognitionRef.current = recognition;
 
-    recognition.onstart = () => {
-      setIsRecording(true);
-      setVoiceStatus(
-        bilingual('🎙️ सुन रहे हैं... अपनी समस्या बोलें', '🎙️ Listening... Please speak your problem')
-      );
-    };
-
-    recognition.onresult = (event: any) => {
-      let transcript = '';
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
+    try {
+      // Determine optimal audio mime type
+      let chosenMime = 'audio/webm;codecs=opus';
+      if (typeof MediaRecorder !== 'undefined') {
+        if (!MediaRecorder.isTypeSupported(chosenMime)) chosenMime = 'audio/webm';
+        if (!MediaRecorder.isTypeSupported(chosenMime)) chosenMime = 'audio/mp4';
+        if (!MediaRecorder.isTypeSupported(chosenMime)) chosenMime = 'audio/ogg';
+        if (!MediaRecorder.isTypeSupported(chosenMime)) chosenMime = '';
       }
-      setText((prev) => {
-        const separator = prev.trim() ? ' ' : '';
-        return prev + separator + transcript;
-      });
-      setFieldErrors((prevErrors) => ({ ...prevErrors, text: undefined }));
-      setVoiceStatus(bilingual('📝 लिखा जा रहा है...', '📝 Transcribing audio...'));
-    };
+      setAudioMimeType(chosenMime || 'audio/webm');
 
-    recognition.onerror = (event: any) => {
-      setIsRecording(false);
-      if (event.error === 'no-speech') {
-        setVoiceStatus(
+      // Request live microphone hardware access
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const options = chosenMime ? { mimeType: chosenMime } : undefined;
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const finalBlob = new Blob(audioChunksRef.current, {
+          type: chosenMime || 'audio/webm',
+        });
+        if (finalBlob.size > 0) {
+          setAudioBlob(finalBlob);
+          const newUrl = URL.createObjectURL(finalBlob);
+          setAudioUrl(newUrl);
+          setFieldErrors((prev) => ({ ...prev, text: undefined }));
+        }
+        setIsRecordingAudio(false);
+        // Release hardware mic indicator immediately
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((track) => track.stop());
+          streamRef.current = null;
+        }
+      };
+
+      mediaRecorder.start(250); // Capture chunks every 250ms
+      setIsRecordingAudio(true);
+      setRecordingSeconds(0);
+
+      // Start duration stopwatch timer with 3-minute (180s) maximum cap
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      let sec = 0;
+      recordingTimerRef.current = setInterval(() => {
+        sec += 1;
+        setRecordingSeconds(sec);
+        setAudioDuration(sec);
+        if (sec >= 180) {
+          // Automatic stop at 3 minutes
+          stopAudioRecording();
+        }
+      }, 1000);
+
+      // Concurrently run SpeechRecognition (if browser supports) for auxiliary text transcription
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        try {
+          const recognition = new SpeechRecognition();
+          recognition.lang = lang === 'hi' ? 'hi-IN' : 'en-IN';
+          recognition.interimResults = true;
+          recognition.continuous = true;
+          recognitionRef.current = recognition;
+          recognition.onresult = (event: any) => {
+            let transcript = '';
+            for (let i = 0; i < event.results.length; i++) {
+              transcript += event.results[i][0].transcript;
+            }
+            if (transcript.trim()) {
+              setText(transcript);
+            }
+          };
+          recognition.start();
+        } catch {}
+      }
+    } catch (err: any) {
+      console.error('Microphone error:', err);
+      setIsRecordingAudio(false);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setAudioError(
           bilingual(
-            'आवाज़ नहीं सुनाई दी। पुनः प्रयास करें।',
-            'No voice detected. Tap mic to try again.'
+            'माइक्रोफोन अनुमति अस्वीकृत की गई। कृपया ब्राउज़र सेटिंग्स में माइक्रोफोन की अनुमति दें।',
+            'Microphone permission denied. Please allow microphone access in your browser settings.'
+          )
+        );
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        setAudioError(
+          bilingual(
+            'कोई माइक्रोफोन उपकरण नहीं मिला। कृपया माइक कनेक्ट करें या टेक्स्ट मोड का उपयोग करें।',
+            'No microphone device found. Please connect a microphone or use text mode.'
           )
         );
       } else {
-        setVoiceStatus(
+        setAudioError(
           bilingual(
-            `माइक्रोफोन त्रुटि (${event.error})। आप समस्या टाइप भी कर सकते हैं।`,
-            `Microphone error (${event.error}). You can type your problem above.`
+            `माइक्रोफोन त्रुटि (${err.message || err.name})। आप टेक्स्ट मोड में टाइप भी कर सकते हैं।`,
+            `Microphone error (${err.message || err.name}). You can also type your complaint in text mode.`
           )
         );
       }
-    };
-
-    recognition.onend = () => {
-      setIsRecording(false);
-      if (text) {
-        setVoiceStatus(
-          bilingual('✅ आवाज़ विवरण में जुड़ गई!', '✅ Voice transcribed into description!')
-        );
-      } else {
-        setVoiceStatus(
-          bilingual('माइक बटन दबाकर दोबारा बोलें।', 'Tap mic button to speak again.')
-        );
-      }
-    };
-
-    recognition.start();
-  }, [bilingual, lang, text]);
-
-  const stopRecording = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsRecording(false);
-      setVoiceStatus(
-        bilingual(
-          '✅ रिकॉर्डिंग पूर्ण हुई।',
-          '✅ Recording completed.'
-        )
-      );
     }
-  }, [bilingual]);
+  };
+
+  const stopAudioRecording = useCallback(() => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {}
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+    }
+    setIsRecordingAudio(false);
+  }, []);
+
+  const deleteAudioRecording = useCallback(() => {
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+    setAudioBlob(null);
+    setAudioUrl(null);
+    setAudioDuration(0);
+    setRecordingSeconds(0);
+    setAudioError(null);
+    setAudioUploadError(null);
+  }, [audioUrl]);
 
   // Photo & Video File Handlers
   const handleFilesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -546,11 +686,22 @@ export default function Report() {
   const handleAnalyze = async () => {
     const errors: { text?: string; photo?: string; location?: string } = {};
 
-    if (!text.trim()) {
-      errors.text = bilingual(
-        'कृपया अपनी समस्या का विवरण लिखें, बोलें या ऊपर दिए गए विकल्पों में से चुनें।',
-        'Please describe your problem by typing, speaking, or picking a quick issue.'
-      );
+    // Validate Input Mode: Text vs Speak
+    if (inputMode === 'text') {
+      if (!text.trim()) {
+        errors.text = bilingual(
+          'कृपया अपनी समस्या का विवरण लिखें या ऊपर दिए गए त्वरित विकल्पों में से चुनें।',
+          'Please describe your problem by typing or picking a quick option.'
+        );
+      }
+    } else {
+      // Speak mode validation
+      if (!audioBlob) {
+        errors.text = bilingual(
+          'कृपया "रिकॉर्डिंग शुरू करें" दबाकर अपनी समस्या बोलें, या टेक्स्ट मोड में टाइप करें।',
+          'Please tap "Start Recording" to speak your issue, or switch to Text mode.'
+        );
+      }
     }
 
     if (!hasPhoto) {
@@ -570,8 +721,12 @@ export default function Report() {
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
       if (errors.text) {
-        textInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        textInputRef.current?.focus();
+        if (inputMode === 'text') {
+          textInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          textInputRef.current?.focus();
+        } else {
+          window.scrollTo({ top: 120, behavior: 'smooth' });
+        }
       } else if (errors.photo) {
         evidenceSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else if (errors.location) {
@@ -585,8 +740,17 @@ export default function Report() {
     setStep('processing');
     await new Promise((r) => setTimeout(r, 1200));
 
+    const effectiveText = text.trim() || (
+      audioBlob
+        ? bilingual(
+            `नागरिक द्वारा मौखिक वॉइस शिकायत (${audioDuration}s) रिकॉर्ड की गई है।`,
+            `Civic voice complaint recorded by citizen (${audioDuration}s audio).`
+          )
+        : 'Civic problem reported with verified evidence'
+    );
+
     const chosenCat = selectedCategory || (aiVisionResult ? aiVisionResult.detected_category : undefined);
-    const result = analyzeProblemDemo(text || 'Civic problem reported with verified evidence', chosenCat);
+    const result = analyzeProblemDemo(effectiveText, chosenCat);
     setAnalysis(result);
 
     const imgResult = aiVisionResult || analyzeImageDemo(chosenCat);
@@ -598,6 +762,7 @@ export default function Report() {
   const handleSubmit = async () => {
     if (!analysis || !location) return;
 
+    // 1. Photo Storage Upload
     let finalImageUrl = imagePreview;
     if (imageFile) {
       try {
@@ -610,6 +775,46 @@ export default function Report() {
       }
     }
 
+    // 2. Audio Recording Storage Upload (Core Persistent Storage Requirement)
+    let finalAudioUrl: string | null = null;
+    let finalAudioPath: string | null = null;
+
+    if (audioBlob) {
+      setIsUploadingAudio(true);
+      setAudioUploadError(null);
+      try {
+        const ext = audioMimeType.includes('mp4') ? 'mp4' : 'webm';
+        const audioFileName = `voice-${Date.now()}.${ext}`;
+        const { path, url, error: uploadErr } = await uploadReportAudio(audioBlob, audioFileName);
+
+        if (uploadErr) {
+          setIsUploadingAudio(false);
+          setAudioUploadError(
+            bilingual(
+              `ऑडियो रिकॉर्डिंग अपलोड असफल रहा (${uploadErr})। कृपया पुनः प्रयास करें।`,
+              `Voice recording upload failed (${uploadErr}). Please retry submission.`
+            )
+          );
+          return;
+        }
+
+        finalAudioPath = path;
+        finalAudioUrl = url;
+      } catch (err: any) {
+        setIsUploadingAudio(false);
+        setAudioUploadError(
+          bilingual(
+            'ऑडियो फाइल नेटवर्क त्रुटि। कृपया इंटरनेट जांचें और पुनः प्रयास करें।',
+            'Audio recording network error. Please check your connection and retry.'
+          )
+        );
+        return;
+      } finally {
+        setIsUploadingAudio(false);
+      }
+    }
+
+    // 3. Complaint Creation with Durable Audio Association & Consent Metadata
     const complaint = createComplaint({
       title: analysis.title,
       description: analysis.description,
@@ -626,7 +831,11 @@ export default function Report() {
       image_url: finalImageUrl,
       video_url: videoUrl,
       media: mediaList,
-      voice_transcript: text,
+      voice_transcript: text.trim() || (audioBlob ? bilingual('ऑडियो वॉइस रिकॉर्डिंग संलग्न', 'Voice Audio Recording Attached') : null),
+      audio_url: finalAudioUrl || (audioUrl && audioUrl.startsWith('blob:') ? audioUrl : null),
+      audio_duration: audioDuration > 0 ? audioDuration : null,
+      audio_mime_type: audioMimeType,
+      public_audio_consent: publicAudioConsent,
       ai_summary: analysis.description,
       ai_confidence: analysis.confidence,
       assigned_department:
@@ -647,6 +856,9 @@ export default function Report() {
 
   const handleReset = () => {
     setText('');
+    deleteAudioRecording();
+    setInputMode('text');
+    setPublicAudioConsent(true);
     setImageFile(null);
     setMediaList([]);
     setAnalysis(null);
@@ -699,69 +911,355 @@ export default function Report() {
         {step === 'input' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-            {/* 1. TEXT INPUT & COMPLAINT DESCRIPTION AT TOP */}
+            {/* 1. COMPLAINT INPUT MODE: MUTUALLY EXCLUSIVE TWO-OPTION SELECTOR (TEXT VS SPEAK) */}
             <div className="card" style={{ padding: '1.25rem', textAlign: 'left', border: fieldErrors.text ? '1.5px solid #dc2626' : '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.4rem' }}>
-                <label className="form-label" style={{ margin: 0, fontWeight: 800, color: '#0b3a6d', fontSize: '0.95rem' }}>
-                  1. {bilingual('समस्या का विवरण (Problem Description) *', 'Problem Description *')}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                <label className="form-label" style={{ margin: 0, fontWeight: 800, color: '#0b3a6d', fontSize: '0.98rem' }}>
+                  1. {bilingual('समस्या का माध्यम चुनें (Input Mode: Text or Speak) *', 'Choose Input Mode (Text or Speak) *')}
                 </label>
                 <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
                   {bilingual('अनिवार्य क्षेत्र', 'Mandatory Field')}
                 </span>
               </div>
 
-              {/* Quick Select Chips */}
-              <div style={{ marginBottom: '0.85rem' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '0.35rem' }}>
-                  ⚡ {bilingual('त्वरित विकल्प (1-टैप में चुनें):', 'Quick Options (1-Tap):')}
-                </span>
-                <div className="mobile-quick-chips">
-                  {quickProblems.map((p, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      className="mobile-quick-chip"
-                      onClick={() => handleQuickSelect(p)}
-                      style={{
-                        border: selectedQuickProblem === p.tagEn ? '2px solid #0b3a6d' : '1px solid #cbd5e1',
-                        background: selectedQuickProblem === p.tagEn ? '#eff6ff' : '#f8fafc',
-                        fontWeight: selectedQuickProblem === p.tagEn ? 800 : 500,
-                        color: selectedQuickProblem === p.tagEn ? '#0b3a6d' : '#334155'
-                      }}
-                      title={lang === 'hi' ? p.hi : p.en}
-                    >
-                      <span>{p.icon}</span>
-                      <span>{lang === 'hi' ? p.tagHi : p.tagEn}</span>
-                      {selectedQuickProblem === p.tagEn && <span style={{ color: '#15803d', fontSize: '0.75rem' }}>✓</span>}
-                    </button>
-                  ))}
-                </div>
+              {/* Mutually Exclusive Mode Selector Tabs */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '0.5rem',
+                  marginBottom: '1.1rem',
+                  background: '#f1f5f9',
+                  padding: '0.35rem',
+                  borderRadius: '10px',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => handleModeSwitch('text')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem',
+                    padding: '0.7rem 0.85rem',
+                    borderRadius: '8px',
+                    border: inputMode === 'text' ? '1.5px solid #0b3a6d' : '1px solid transparent',
+                    background: inputMode === 'text' ? '#0b3a6d' : 'transparent',
+                    color: inputMode === 'text' ? '#ffffff' : '#334155',
+                    fontWeight: 800,
+                    fontSize: '0.92rem',
+                    cursor: 'pointer',
+                    boxShadow: inputMode === 'text' ? '0 2px 8px rgba(11,58,109,0.2)' : 'none',
+                    transition: 'all 0.15s ease',
+                  }}
+                  aria-pressed={inputMode === 'text'}
+                >
+                  <FileText size={17} color={inputMode === 'text' ? '#ffffff' : '#475569'} />
+                  <span>{bilingual('टेक्स्ट (Text) — डिफ़ॉल्ट', 'Text — Default')}</span>
+                  {inputMode === 'text' && (
+                    <span style={{ fontSize: '0.68rem', background: '#2563eb', color: '#fff', padding: '1px 6px', borderRadius: 10, fontWeight: 700 }}>
+                      ✓
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleModeSwitch('speak')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem',
+                    padding: '0.7rem 0.85rem',
+                    borderRadius: '8px',
+                    border: inputMode === 'speak' ? '1.5px solid #0b3a6d' : '1px solid transparent',
+                    background: inputMode === 'speak' ? '#0b3a6d' : 'transparent',
+                    color: inputMode === 'speak' ? '#ffffff' : '#334155',
+                    fontWeight: 800,
+                    fontSize: '0.92rem',
+                    cursor: 'pointer',
+                    boxShadow: inputMode === 'speak' ? '0 2px 8px rgba(11,58,109,0.2)' : 'none',
+                    transition: 'all 0.15s ease',
+                  }}
+                  aria-pressed={inputMode === 'speak'}
+                >
+                  <Mic size={17} color={inputMode === 'speak' ? '#ffffff' : '#475569'} />
+                  <span>{bilingual('बोलकर (Speak / Record)', 'Speak (Audio Record)')}</span>
+                  {inputMode === 'speak' && (
+                    <span style={{ fontSize: '0.68rem', background: '#2563eb', color: '#fff', padding: '1px 6px', borderRadius: 10, fontWeight: 700 }}>
+                      ✓
+                    </span>
+                  )}
+                </button>
               </div>
 
-              <textarea
-                ref={textInputRef}
-                className="text-input-area"
-                style={{
-                  minHeight: '100px',
-                  border: fieldErrors.text ? '1.5px solid #dc2626' : '1px solid #cbd5e1',
-                  background: fieldErrors.text ? '#fef2f2' : '#ffffff'
-                }}
-                value={text}
-                onChange={(e) => {
-                  setText(e.target.value);
-                  if (fieldErrors.text) {
-                    setFieldErrors((prev) => ({ ...prev, text: undefined }));
-                  }
-                }}
-                placeholder={bilingual(
-                  'अपनी समस्या विस्तार से लिखें (उदा. हमारे वार्ड 12 में मुख्य सड़क पर पेयजल पाइपलाइन फूट गई है और भारी मात्रा में पानी बह रहा है...)',
-                  'Describe your civic problem (e.g. water pipeline leakage in Civil Lines, garbage accumulation near school...)'
-                )}
-                aria-label="Problem description"
-              />
+              {/* ─── OPTION 1: TEXT MODE INTERFACE ──────────────────────── */}
+              {inputMode === 'text' && (
+                <div>
+                  {/* Quick Select Chips */}
+                  <div style={{ marginBottom: '0.85rem' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '0.35rem' }}>
+                      ⚡ {bilingual('त्वरित विकल्प (1-टैप में चुनें):', 'Quick Options (1-Tap):')}
+                    </span>
+                    <div className="mobile-quick-chips">
+                      {quickProblems.map((p, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          className="mobile-quick-chip"
+                          onClick={() => handleQuickSelect(p)}
+                          style={{
+                            border: selectedQuickProblem === p.tagEn ? '2px solid #0b3a6d' : '1px solid #cbd5e1',
+                            background: selectedQuickProblem === p.tagEn ? '#eff6ff' : '#f8fafc',
+                            fontWeight: selectedQuickProblem === p.tagEn ? 800 : 500,
+                            color: selectedQuickProblem === p.tagEn ? '#0b3a6d' : '#334155',
+                          }}
+                          title={lang === 'hi' ? p.hi : p.en}
+                        >
+                          <span>{p.icon}</span>
+                          <span>{lang === 'hi' ? p.tagHi : p.tagEn}</span>
+                          {selectedQuickProblem === p.tagEn && <span style={{ color: '#15803d', fontSize: '0.75rem' }}>✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
+                  <textarea
+                    ref={textInputRef}
+                    className="text-input-area"
+                    style={{
+                      minHeight: '110px',
+                      border: fieldErrors.text ? '1.5px solid #dc2626' : '1px solid #cbd5e1',
+                      background: fieldErrors.text ? '#fef2f2' : '#ffffff',
+                    }}
+                    value={text}
+                    onChange={(e) => {
+                      setText(e.target.value);
+                      if (fieldErrors.text) {
+                        setFieldErrors((prev) => ({ ...prev, text: undefined }));
+                      }
+                    }}
+                    placeholder={bilingual(
+                      'अपनी समस्या विस्तार से लिखें (उदा. हमारे वार्ड 12 में मुख्य सड़क पर पेयजल पाइपलाइन फूट गई है और भारी मात्रा में पानी बह रहा है...)',
+                      'Describe your civic problem (e.g. water pipeline leakage in Civil Lines, garbage accumulation near school...)'
+                    )}
+                    aria-label="Problem description in text mode"
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.35rem', fontSize: '0.75rem', color: '#64748b' }}>
+                    <span>{bilingual('हिंदी / English दोनों समर्थित', 'Hindi & English both supported')}</span>
+                    <span>{text.length} {bilingual('अक्षर', 'characters')}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* ─── OPTION 2: SPEAK MODE INTERFACE (MEDIARECORDER) ──────── */}
+              {inputMode === 'speak' && (
+                <div style={{ background: '#f8fafc', borderRadius: 12, padding: '1.25rem', border: '1.5px solid #cbd5e1' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <span style={{ fontSize: '1.1rem' }}>🎙️</span>
+                      <strong style={{ color: '#0b3a6d', fontSize: '0.92rem' }}>
+                        {bilingual('मौखिक शिकायत रिकॉर्डिंग (Voice Complaint Recording)', 'Voice Grievance Recording')}
+                      </strong>
+                    </div>
+                    <span style={{ fontSize: '0.74rem', color: '#475569', background: '#e2e8f0', padding: '2px 8px', borderRadius: 12, fontWeight: 600 }}>
+                      {bilingual('हिंदी / बघेली / English • अधिकतम 3 मिनट', 'Hindi / Bagheli / English • Max 3 mins')}
+                    </span>
+                  </div>
+
+                  {/* 1. STATE: NOT YET RECORDED & NOT RECORDING */}
+                  {!isRecordingAudio && !audioUrl && (
+                    <div style={{ textAlign: 'center', padding: '1.5rem 0.5rem' }}>
+                      <button
+                        type="button"
+                        onClick={startAudioRecording}
+                        className="btn btn-primary"
+                        style={{
+                          background: '#0b3a6d',
+                          padding: '0.9rem 1.8rem',
+                          borderRadius: '50px',
+                          fontSize: '1.02rem',
+                          fontWeight: 800,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.65rem',
+                          boxShadow: '0 4px 14px rgba(11,58,109,0.25)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <Mic size={20} color="#fbbf24" />
+                        <span>{bilingual('रिकॉर्डिंग शुरू करें (Start Recording)', 'Start Recording')}</span>
+                      </button>
+                      <p style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '0.75rem', marginBottom: 0 }}>
+                        {bilingual(
+                          'बटन दबाकर अपनी समस्या बोलें — आपका वास्तविक ऑडियो रिकॉर्ड होकर नगर निगम को भेजा जाएगा।',
+                          'Tap to speak — your genuine voice will be recorded and attached to the complaint.'
+                        )}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 2. STATE: ACTIVELY RECORDING */}
+                  {isRecordingAudio && (
+                    <div style={{ textAlign: 'center', padding: '1.25rem 0.5rem' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#fee2e2', color: '#dc2626', padding: '0.35rem 1rem', borderRadius: 20, fontWeight: 800, fontSize: '0.85rem', marginBottom: '0.85rem' }}>
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#dc2626', display: 'inline-block', animation: 'pulse 1s infinite' }} />
+                        <span>{bilingual('रिकॉर्ड हो रहा है... (Recording in Progress)', 'Recording in progress...')}</span>
+                      </div>
+
+                      {/* Live duration timer */}
+                      <div style={{ fontSize: '2rem', fontWeight: 900, color: '#0f172a', fontFamily: 'monospace', letterSpacing: '0.08em', marginBottom: '1rem' }}>
+                        {Math.floor(recordingSeconds / 60).toString().padStart(2, '0')}:{(recordingSeconds % 60).toString().padStart(2, '0')}
+                        <span style={{ fontSize: '0.95rem', color: '#64748b', fontWeight: 600, marginLeft: '0.4rem' }}>
+                          / 03:00
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={stopAudioRecording}
+                        style={{
+                          background: '#dc2626',
+                          color: '#ffffff',
+                          border: 'none',
+                          padding: '0.85rem 1.75rem',
+                          borderRadius: '50px',
+                          fontSize: '0.98rem',
+                          fontWeight: 800,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.55rem',
+                          boxShadow: '0 4px 14px rgba(220,38,38,0.3)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <Square size={17} fill="#ffffff" color="#ffffff" />
+                        <span>{bilingual('रिकॉर्डिंग रोकें (Stop Recording)', 'Stop Recording')}</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 3. STATE: RECORDED AUDIO PREVIEW & CONTROLS */}
+                  {audioUrl && !isRecordingAudio && (
+                    <div>
+                      <div style={{ background: '#ffffff', border: '1.5px solid #86efac', borderRadius: 10, padding: '0.85rem', marginBottom: '0.85rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                          <span style={{ fontSize: '0.78rem', color: '#166534', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <CheckCircle2 size={15} color="#15803d" />
+                            {bilingual(`✓ वास्तविक ऑडियो रिकॉर्ड हुआ (${audioDuration}s)`, `✓ Audio Recorded (${audioDuration}s)`)}
+                          </span>
+                          <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>
+                            MIME: {audioMimeType}
+                          </span>
+                        </div>
+
+                        {/* Native HTML5 Audio Preview with accessible controls */}
+                        <audio
+                          src={audioUrl}
+                          controls
+                          playsInline
+                          style={{ width: '100%', height: '40px', outline: 'none', marginBottom: '0.4rem' }}
+                        />
+
+                        {/* Re-record & Delete Controls */}
+                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.4rem', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={startAudioRecording}
+                            className="btn btn-secondary btn-sm"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontWeight: 700 }}
+                          >
+                            <RotateCcw size={14} />
+                            <span>{bilingual('दोबारा रिकॉर्ड करें (Record Again)', 'Record Again')}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={deleteAudioRecording}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                              background: '#fef2f2',
+                              color: '#dc2626',
+                              border: '1px solid #fca5a5',
+                              padding: '0.35rem 0.75rem',
+                              borderRadius: 6,
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Trash2 size={14} />
+                            <span>{bilingual('हटाएं (Delete)', 'Delete')}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Public Sharing Consent Checkbox (Privacy Requirement) */}
+                      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '0.85rem', marginBottom: '0.65rem' }}>
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.65rem', cursor: 'pointer', margin: 0 }}>
+                          <input
+                            type="checkbox"
+                            checked={publicAudioConsent}
+                            onChange={(e) => setPublicAudioConsent(e.target.checked)}
+                            style={{ marginTop: '0.2rem', width: 17, height: 17, accentColor: '#0b3a6d', cursor: 'pointer' }}
+                          />
+                          <div>
+                            <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0b3a6d', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <Globe size={15} color="#0b3a6d" />
+                              <span>{bilingual('सार्वजनिक ट्रैकिंग पोर्टल पर ऑडियो सुनने की अनुमति दें', 'Allow Public Audio Playback')}</span>
+                            </div>
+                            <p style={{ fontSize: '0.78rem', color: '#334155', margin: '0.25rem 0 0', lineHeight: 1.45 }}>
+                              {bilingual(
+                                'रीवा नगर निगम के अधिकृत कर्मी व अधिकारी इस ऑडियो को सदैव सुन सकेंगे। यदि आप चाहते हैं कि सार्वजनिक ट्रैकिंग पोर्टल पर भी नागरिक इसे सुन सकें, तो यह चेकबॉक्स चयनित रहने दें। ⚠️ कृपया पासवर्ड, आधार या बैंक विवरण न बोलें।',
+                                'Authorized municipal personnel will always hear this audio to resolve your issue. Check this box if you consent to public playback on the complaint tracking page. ⚠️ Please avoid speaking sensitive personal data.'
+                              )}
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Speech Recognition Auxiliary Transcript (if generated) */}
+                      {text.trim() && (
+                        <div style={{ fontSize: '0.8rem', color: '#475569', background: '#ffffff', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px dashed #cbd5e1' }}>
+                          <span style={{ fontWeight: 700, color: '#0b3a6d' }}>
+                            📝 {bilingual('AI ट्रांसक्रिप्शन सारांश:', 'AI Speech Summary:')}
+                          </span>{' '}
+                          "{text}"
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Audio Hardware Error Alert */}
+                  {audioError && (
+                    <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '0.65rem 0.85rem', color: '#dc2626', fontSize: '0.82rem', marginTop: '0.65rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span>⚠️ {audioError}</span>
+                      <button
+                        type="button"
+                        onClick={startAudioRecording}
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: '0.74rem', padding: '0.2rem 0.6rem' }}
+                      >
+                        {bilingual('पुनः प्रयास', 'Retry')}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Audio Upload Error Alert */}
+                  {audioUploadError && (
+                    <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '0.65rem 0.85rem', color: '#dc2626', fontSize: '0.82rem', marginTop: '0.65rem' }}>
+                      ⚠️ {audioUploadError}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Mode-wide validation error */}
               {fieldErrors.text && (
-                <p style={{ margin: '0.4rem 0 0', color: '#dc2626', fontSize: '0.82rem', fontWeight: 700 }}>
+                <p style={{ margin: '0.6rem 0 0', color: '#dc2626', fontSize: '0.82rem', fontWeight: 700 }}>
                   ⚠️ {fieldErrors.text}
                 </p>
               )}
@@ -1165,39 +1663,7 @@ export default function Report() {
                 </div>
               )}
             </div>
-
-            {/* 4. VOICE OR SPEAK CONTROL AT THE BOTTOM */}
-            <div className="card" style={{ padding: '1.25rem', textAlign: 'center', border: '1px solid #e2e8f0', background: '#f8fafc' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem', flexWrap: 'wrap', gap: '0.4rem' }}>
-                <label className="form-label" style={{ margin: 0, fontWeight: 800, color: '#0b3a6d', fontSize: '0.95rem' }}>
-                  4. {bilingual('बोलकर बताएं (Voice Input - Optional)', 'Voice Input (Optional Helper)')}
-                </label>
-                <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                  {bilingual('हिंदी / बघेली / English समर्थित', 'Hindi / Bagheli / English')}
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0.75rem 0' }}>
-                <button
-                  type="button"
-                  className={`mic-btn ${isRecording ? 'recording' : ''}`}
-                  onClick={isRecording ? stopRecording : startRecording}
-                  aria-label={isRecording ? 'Stop recording' : 'Start voice recording'}
-                  style={{ width: '64px', height: '64px', margin: '0 0 0.5rem' }}
-                >
-                  {isRecording ? <MicOff size={32} /> : <Mic size={32} />}
-                </button>
-                <p className="mic-status" style={{ fontSize: '0.85rem', margin: '0.25rem 0' }}>
-                  {voiceStatus ||
-                    bilingual(
-                      'माइक दबाएं और बोलें — आवाज़ अपने आप ऊपर विवरण में जुड़ जाएगी',
-                      'Tap mic and speak — your voice will be transcribed into the description above'
-                    )}
-                </p>
-              </div>
-            </div>
-
-            {/* 5. PRIMARY SUBMIT ACTION */}
+            {/* 4. PRIMARY SUBMIT ACTION */}
             <div style={{ textAlign: 'center', marginTop: '0.5rem' }}>
               <button
                 type="button"
@@ -1354,6 +1820,21 @@ export default function Report() {
                   ✓ {photoCount} {bilingual('फोटो', 'Photo(s)')} {videoCount > 0 ? `• ${videoCount} वीडियो` : ''}
                 </span>
               </div>
+              {audioUrl && (
+                <div className="preview-row" style={{ background: '#eff6ff' }}>
+                  <span className="preview-label" style={{ color: '#0b3a6d' }}>
+                    🎙️ {bilingual('वॉइस रिकॉर्डिंग', 'Voice Recording')}
+                  </span>
+                  <span className="preview-value" style={{ maxWidth: '65%' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
+                      <span style={{ color: '#0b3a6d', fontWeight: 700, fontSize: '0.84rem' }}>
+                        ✓ {audioDuration}s ({publicAudioConsent ? bilingual('सार्वजनिक श्रवण स्वीकृत', 'Public Playback Allowed') : bilingual('आंतरिक गोपनीय', 'Confidential to Municipal Staff')})
+                      </span>
+                      <audio src={audioUrl} controls style={{ height: '32px', width: '220px' }} />
+                    </div>
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Media Gallery in Preview */}
@@ -1570,6 +2051,66 @@ export default function Report() {
                     <span>{bilingual('हाँ, श्रेणी बदलें', 'Confirm Change')}</span>
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Input Mode Switching Confirmation Guard Dialog */}
+        {pendingSwitchMode && (
+          <div style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 99999, padding: '1rem',
+          }}>
+            <div style={{
+              background: '#ffffff', borderRadius: '16px', maxWidth: '440px', width: '100%',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.3)', border: '1.5px solid #cbd5e1', overflow: 'hidden',
+              padding: '1.5rem', textAlign: 'center'
+            }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: '50%', background: '#fef3c7',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.85rem'
+              }}>
+                <AlertTriangle size={24} color="#d97706" />
+              </div>
+
+              <h4 style={{ margin: '0 0 0.5rem', fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
+                {bilingual('माध्यम बदलने की पुष्टि (Confirm Mode Switch)', 'Confirm Mode Switch')}
+              </h4>
+
+              <p style={{ fontSize: '0.88rem', color: '#475569', lineHeight: 1.5, margin: '0 0 1.25rem' }}>
+                {pendingSwitchMode === 'speak'
+                  ? bilingual(
+                      'आप "बोलकर (Speak)" मोड चुन रहे हैं। वर्तमान में टाइप किया गया टेक्स्ट विवरण हट जाएगा। क्या आप जारी रखना चाहते हैं?',
+                      'Switching to Speak mode will clear your currently typed complaint description. Do you wish to proceed?'
+                    )
+                  : bilingual(
+                      'आप "टेक्स्ट (Text)" मोड चुन रहे हैं। आपकी पूर्व में रिकॉर्ड की गई वॉइस फाइल हट जाएगी। क्या आप जारी रखना चाहते हैं?',
+                      'Switching to Text mode will discard your existing voice recording. Do you wish to proceed?'
+                    )}
+              </p>
+
+              <div style={{ display: 'flex', gap: '0.65rem', justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  onClick={confirmModeSwitch}
+                  className="btn btn-primary"
+                  style={{ background: '#dc2626', borderColor: '#b91c1c', fontWeight: 800, padding: '0.65rem 1.25rem' }}
+                >
+                  {bilingual('हाँ, मोड बदलें (Confirm)', 'Yes, Switch Mode')}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelModeSwitch}
+                  className="btn btn-secondary"
+                  style={{ fontWeight: 700, padding: '0.65rem 1.25rem' }}
+                >
+                  {bilingual('रद्द करें (Cancel)', 'Cancel')}
+                </button>
               </div>
             </div>
           </div>

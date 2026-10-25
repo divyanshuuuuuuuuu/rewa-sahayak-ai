@@ -241,6 +241,11 @@ export default function Complaints() {
                             <Camera size={12} /> {bilingual("फोटो साक्ष्य", "Photo Attached")}
                           </span>
                         )}
+                        {r.voice_audio_path && (
+                          <span style={{ fontSize: "0.72rem", color: "#0b3a6d", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.25rem", background: "#eff6ff", padding: "0.15rem 0.5rem", borderRadius: 4, border: "1px solid #bfdbfe" }}>
+                            🎙️ {bilingual("वॉइस", "Voice Attached")}
+                          </span>
+                        )}
                       </div>
                       <span style={{ fontSize: "0.76rem", color: "#64748b", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
                         <Clock size={12} /> {formatDate(r.submitted_at)}

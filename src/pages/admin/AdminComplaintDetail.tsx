@@ -23,6 +23,7 @@ import MapView from '../../components/MapView';
 import type { ComplaintStatus, Severity } from '../../types';
 import { useGov } from '../../context/GovContext';
 import { downloadPhotoFile, getCompletionPhotoFilename } from '../../services/downloadService';
+import VoiceAudioPlayer from '../../components/VoiceAudioPlayer';
 import { logAudit } from '../../services/departmentAccountService';
 
 export default function AdminComplaintDetail() {
@@ -419,6 +420,19 @@ export default function AdminComplaintDetail() {
                 <div><span style={{ fontSize: '0.75rem', color: '#64748b' }}>{bilingual('नागरिक (Citizen)', 'Citizen')}</span><p style={{ fontWeight: 600 }}>{complaint.citizen_name}</p></div>
               </div>
             </div>
+
+            {/* Citizen Audio Recording Player (Admin Supervisory Access) */}
+            {complaint.audio_url && (
+              <div style={{ marginBottom: '1.25rem' }}>
+                <VoiceAudioPlayer
+                  audioUrl={complaint.audio_url}
+                  duration={complaint.audio_duration}
+                  publicConsent={complaint.public_audio_consent !== false}
+                  canPlayAuthorized={true}
+                  title={bilingual('नागरिक वॉइस रिकॉर्डिंग (Citizen Voice Recording)', 'Citizen Audio Recording')}
+                />
+              </div>
+            )}
 
             {complaint.voice_transcript && (
               <div className="card" style={{ marginBottom: '1.25rem' }}>

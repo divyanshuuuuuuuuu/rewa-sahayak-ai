@@ -53,6 +53,9 @@ export interface WorkerAssignment {
   delay_reason?: string | null;
   removed_from_website?: boolean | null;
   removal_reason?: string | null;
+  voice_audio_path?: string | null;
+  voice_audio_duration?: number | null;
+  public_audio_consent?: boolean | null;
   submitted_at: string;
   updated_at: string;
   citizen_name: string | null;
@@ -293,6 +296,9 @@ export async function getMyAssignmentById(reportId: string): Promise<{
             delay_reason: match.delay_reason,
             resolution_note: match.resolution_note || match.completion_note,
             resolved_at: match.resolved_at,
+            voice_audio_path: match.audio_url || match.voice_audio_path,
+            voice_audio_duration: match.audio_duration || match.voice_audio_duration,
+            public_audio_consent: match.public_audio_consent,
             submitted_at: match.created_at,
             updated_at: match.updated_at,
             citizen_name: match.citizen_name,

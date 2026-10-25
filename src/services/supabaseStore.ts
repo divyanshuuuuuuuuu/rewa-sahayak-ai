@@ -25,6 +25,10 @@ export interface DbReport {
   ai_summary: string | null;
   ai_confidence: number | null;
   voice_transcript: string | null;
+  voice_audio_path?: string | null;
+  voice_audio_duration?: number | null;
+  voice_audio_mime_type?: string | null;
+  public_audio_consent?: boolean;
   assigned_department_id: string | null;
   assigned_department_name: string | null;
   assigned_to: string | null;
@@ -64,6 +68,10 @@ export interface CreateReportPayload {
   ai_summary?: string;
   ai_confidence?: number;
   voice_transcript?: string;
+  voice_audio_path?: string | null;
+  voice_audio_duration?: number | null;
+  voice_audio_mime_type?: string | null;
+  public_audio_consent?: boolean;
 }
 
 // ─── Upload image to Supabase Storage ────────────────────────────────────────
@@ -80,11 +88,69 @@ export async function uploadReportImage(
   return { path: data.path, error: null };
 }
 
+// ─── Upload audio recording to Supabase Storage ──────────────────────────────
+export async function uploadReportAudio(
+  audioBlob: Blob,
+  fileName?: string
+): Promise<{ path: string | null; url: string | null; error: string | null }> {
+  try {
+    const ext = audioBlob.type.includes('mp4') ? 'mp4' : 'webm';
+    const name = fileName || `voice-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+    // Attempt upload to 'report-recordings' first, fall back to 'report-images'
+    let targetBucket = 'report-recordings';
+    let { data, error } = await supabase.storage
+      .from(targetBucket)
+      .upload(name, audioBlob, {
+        contentType: audioBlob.type || 'audio/webm',
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (error && (error.message.toLowerCase().includes('bucket not found') || (error as any).statusCode === 404)) {
+      targetBucket = 'report-images';
+      const fallback = await supabase.storage
+        .from(targetBucket)
+        .upload(name, audioBlob, {
+          contentType: audioBlob.type || 'audio/webm',
+          cacheControl: '3600',
+          upsert: false,
+        });
+      data = fallback.data;
+      error = fallback.error;
+    }
+
+    if (error) {
+      return { path: null, url: null, error: error.message };
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from(targetBucket)
+      .getPublicUrl(data!.path);
+
+    return { path: data!.path, url: publicUrlData.publicUrl, error: null };
+  } catch (err: any) {
+    return { path: null, url: null, error: err?.message || 'Failed to upload audio recording' };
+  }
+}
+
 // Get public or signed URL for an image
 export function getImageUrl(
   path: string,
   bucket: "report-images" | "completion-images" = "report-images"
 ): string {
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+// Get public URL for audio
+export function getAudioUrl(
+  path: string,
+  bucket: "report-recordings" | "report-images" = "report-recordings"
+): string {
+  if (path.startsWith('http') || path.startsWith('blob:') || path.startsWith('data:')) {
+    return path;
+  }
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }
