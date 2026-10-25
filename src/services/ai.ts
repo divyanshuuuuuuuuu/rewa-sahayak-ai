@@ -60,7 +60,12 @@ function detectCategory(text: string): Category {
 
 function detectSeverity(text: string): Severity {
   const lower = text.toLowerCase();
-  const highKeywords = ['urgent', 'emergency', 'danger', 'accident', 'health', 'bimar', 'sick', 'critical', 'contamination', 'cave', 'broken', 'hazard', 'risk', 'flood', '4 din', '5 din', '3 din', 'hospital', 'school', 'burning'];
+  const highKeywords = [
+    'urgent', 'emergency', 'danger', 'accident', 'health', 'bimar', 'sick', 'critical',
+    'contamination', 'cave', 'broken', 'hazard', 'risk', 'flood',
+    '4 din', '5 din', '3 din', '4 दिन', '5 दिन', '3 दिन', 'दिन से', 'सप्ताह से',
+    'बदबू', 'खतरनाक', 'दुर्घटना', 'आपातकाल', 'hospital', 'school', 'burning'
+  ];
   const lowKeywords = ['minor', 'chota', 'small', 'thoda', 'slight', 'flickering'];
 
   for (const kw of highKeywords) {

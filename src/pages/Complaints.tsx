@@ -173,11 +173,17 @@ export default function Complaints() {
         ) : displayed.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">📭</div>
-            <h3 style={{ color: "#0b3a6d", fontWeight: 800 }}>{bilingual("कोई शिकायत नहीं मिली", "No Complaints Found")}</h3>
+            <h3 style={{ color: "#0b3a6d", fontWeight: 800 }}>
+              {total === 0 && !search && !categoryFilter && !moduleFilter && !statusFilter
+                ? bilingual("अभी कोई शिकायत दर्ज नहीं है", "No complaints yet.")
+                : bilingual("कोई शिकायत नहीं मिली", "No Complaints Found")}
+            </h3>
             <p style={{ color: "#64748b" }}>
               {viewMode === "mine"
                 ? bilingual("आपने अभी तक कोई शिकायत दर्ज नहीं की है।", "You haven't submitted any complaints yet.")
-                : bilingual("कृपया फिल्टर बदलकर पुनः प्रयास करें।", "Try adjusting your filters.")}
+                : total === 0 && !search && !categoryFilter && !moduleFilter && !statusFilter
+                  ? bilingual("नागरिकों द्वारा दर्ज की गई नई शिकायतें यहाँ दिखाई देंगी।", "New complaints submitted by citizens will appear here.")
+                  : bilingual("कृपया फिल्टर बदलकर पुनः प्रयास करें।", "Try adjusting your filters.")}
             </p>
             <Link to="/report" className="btn btn-primary" style={{ marginTop: "1rem" }}>
               {bilingual("अभी शिकायत दर्ज करें", "Lodge a Complaint Now")}

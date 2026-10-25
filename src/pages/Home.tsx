@@ -35,33 +35,32 @@ export default function Home() {
       <section className="hero">
         <div className="container hero-content">
           
-          {/* Civic Innovation Prototype Badge */}
+          {/* Civic Innovation Introductory Label */}
           <div className="hero-badge" role="status">
             <ShieldCheck size={16} color="#0369a1" />
             <span>
               {bilingual(
-                'रीवा सहायक AI • नागरिक जन-सेवा नवाचार प्रोटोटाइप (iComputex 2026)',
-                'Rewa Sahayak AI • Civic Redressal Innovation Prototype (iComputex 2026)'
+                'रीवा सहायक AI | नागरिक शिकायत निवारण मंच',
+                'Rewa Sahayak AI | Civic Grievance Platform'
               )}
             </span>
           </div>
 
           <h1>
-            {bilingual('रीवा सहायक', 'REWA SAHAYAK')}{' '}
-            <span>{bilingual('AI जन-सेवा', 'AI CIVIC TECH')}</span>
+            {bilingual('रीवा सहायक AI', 'Rewa Sahayak AI')}
           </h1>
 
           <p className="tagline">
             {bilingual(
-              '"समस्या बताइए, AI तुरंत समाधान तक पहुंचाएगा"',
-              '"Report your civic issue. AI routes it to the right department."'
+              'अपनी नागरिक समस्या बताएं। सही विभाग तक पहुंचाएं।',
+              'Report your civic issue. Get it to the right department.'
             )}
           </p>
 
           <p className="subtitle">
             {bilingual(
-              'कचरा, पेयजल लीकेज, स्ट्रीट लाइट, गड्ढा या जलभराव — बिना किसी कठिन फॉर्म के, केवल बोलकर, फोटो खींचकर या लिखकर बताएं। रीवा नगर निगम द्वारा त्वरित निवारण।',
-              'Effortlessly report garbage, leaking pipes, dark streetlights, and road potholes using voice, photo, or text. AI categorizes and dispatches to Rewa Municipal Corporation.'
+              'कचरा ढेर, पेयजल लीकेज, क्षतिग्रस्त सड़क, गड्ढे तथा बंद स्ट्रीट लाइट की समस्या लिखकर, बोलकर, फोटो तथा लोकेशन साझा करके दर्ज करें। प्रणाली प्रत्येक शिकायत को श्रेणीबद्ध कर संबंधित नागरिक विभाग तक पहुंचाती है।',
+              'Report garbage accumulation, leaking water pipes, damaged roads, potholes, and broken streetlights using text, voice, photos, and location sharing. The system helps categorize each complaint and route it to the relevant civic department.'
             )}
           </p>
 
@@ -154,7 +153,7 @@ export default function Home() {
             </div>
             <div className="stat-card">
               <div className="stat-value" style={{ color: '#0284c7' }}>
-                {Math.round(((stats.resolved + stats.closed) / (stats.total || 1)) * 100)}%
+                {stats.total > 0 ? `${Math.round(((stats.resolved + stats.closed) / stats.total) * 100)}%` : '—'}
               </div>
               <div className="stat-label">{bilingual('नागरिक संतुष्टि दर', 'Satisfaction Rate')}</div>
             </div>

@@ -33,7 +33,9 @@ export interface DepartmentAuditLog {
     | "WORK_STARTED"
     | "COMPLETION_SUBMITTED"
     | "COMPLAINT_RESOLVED"
-    | "COMPLAINT_REOPENED";
+    | "COMPLAINT_REOPENED"
+    | "COMPLAINT_REMOVED_FROM_PUBLIC"
+    | "COMPLAINT_RESTORED_TO_PUBLIC";
   department_name: string;
   complaint_ref?: string;
   performed_by: string;

@@ -122,7 +122,7 @@ export async function syncFromSupabase(): Promise<Complaint[]> {
       return memoryComplaints;
     }
 
-    if (data && data.length > 0) {
+    if (data) {
       const mapped = data.map((r: any) => dbReportToComplaint(r, r.report_status_history || []));
       memoryComplaints = mapped;
       saveComplaintsToStorage(mapped);
