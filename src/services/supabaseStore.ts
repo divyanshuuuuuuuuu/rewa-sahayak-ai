@@ -232,9 +232,19 @@ export async function getPublicReports(options?: {
   if (options?.module) query = query.eq("module", options.module);
   if (options?.status) query = query.eq("current_status", options.status);
   if (options?.search) {
-    query = query.or(
-      `title.ilike.%${options.search}%,reference_number.ilike.%${options.search}%,location_description.ilike.%${options.search}%`
-    );
+    const cleanSearch = options.search.replace(/[,()]/g, ' ').trim();
+    if (cleanSearch) {
+      const hyphenated = cleanSearch.replace(/\s+/g, '-');
+      const orClauses = [
+        `title.ilike.%${cleanSearch}%`,
+        `reference_number.ilike.%${cleanSearch}%`,
+        `location_description.ilike.%${cleanSearch}%`
+      ];
+      if (hyphenated !== cleanSearch) {
+        orClauses.push(`reference_number.ilike.%${hyphenated}%`);
+      }
+      query = query.or(orClauses.join(','));
+    }
   }
 
   const { data, error, count } = await query;

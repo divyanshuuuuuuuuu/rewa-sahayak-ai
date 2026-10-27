@@ -4,7 +4,7 @@ import {
   Mic, Camera, Droplets, Trash2, MapPin, ArrowRight, ChevronRight, Eye,
   MessageSquare, ShieldCheck, PhoneCall, Search, Sparkles
 } from 'lucide-react';
-import { getStats, syncFromSupabase } from '../services/store';
+import { getStats, syncFromSupabase, getComplaintById } from '../services/store';
 import { useGov } from '../context/GovContext';
 
 export default function Home() {
@@ -22,8 +22,14 @@ export default function Home() {
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchTicket.trim()) {
-      navigate(`/complaints?search=${encodeURIComponent(searchTicket.trim())}`);
+    const query = searchTicket.trim();
+    if (query) {
+      const match = getComplaintById(query);
+      if (match) {
+        navigate(`/complaints/${match.id}`);
+      } else {
+        navigate(`/complaints?search=${encodeURIComponent(query)}`);
+      }
     }
   };
 
@@ -71,8 +77,8 @@ export default function Home() {
                 type="text"
                 aria-label={bilingual('शिकायत क्रमांक द्वारा खोजें', 'Search by ticket number')}
                 placeholder={bilingual(
-                  'शिकायत क्रमांक दर्ज करें (उदा. REWA-2026-000001)',
-                  'Enter ticket number (e.g. REWA-2026-000001)'
+                  'शिकायत क्रमांक दर्ज करें (उदा. REW-2026-01001)',
+                  'Enter ticket number (e.g. REW-2026-01001)'
                 )}
                 value={searchTicket}
                 onChange={(e) => setSearchTicket(e.target.value)}

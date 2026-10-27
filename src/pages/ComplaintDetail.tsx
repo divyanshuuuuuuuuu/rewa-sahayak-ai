@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, MapPin, Clock, User, Building, Sparkles, Printer, ShieldCheck, CheckCircle2, Video, Film, Camera, Download } from 'lucide-react';
-import { getComplaintById, syncFromSupabase } from '../services/store';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, MapPin, Clock, User, Building, Sparkles, Printer, ShieldCheck, CheckCircle2, Video, Film, Camera, Download, Trash2 } from 'lucide-react';
+import { getComplaintById, syncFromSupabase, fetchComplaintByIdAsync, adminDeleteComplaint } from '../services/store';
+import { useAuth } from '../context/AuthContext';
 import { statusColors, severityColors, moduleColors, categoryIcons } from '../services/ai';
 import MapView from '../components/MapView';
 import { useGov } from '../context/GovContext';
 import { downloadPhotoFile, getCompletionPhotoFilename } from '../services/downloadService';
 import { formatDurationText } from '../services/workerService';
-import VoiceAudioPlayer from '../components/VoiceAudioPlayer';
 
 export default function ComplaintDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   const { lang, bilingual, statusLabel, moduleLabel, categoryLabel } = useGov();
   const [complaint, setComplaint] = useState(id ? getComplaintById(id) : undefined);
   const [loading, setLoading] = useState(!complaint);
@@ -41,8 +43,7 @@ export default function ComplaintDetail() {
     const loadData = async () => {
       let current = getComplaintById(id);
       if (!current) {
-        await syncFromSupabase();
-        current = getComplaintById(id);
+        current = await fetchComplaintByIdAsync(id);
       }
       if (active) {
         setComplaint(current);
@@ -144,10 +145,42 @@ export default function ComplaintDetail() {
             <span>{bilingual('← सभी शिकायतों पर वापस', '← Back to All Complaints')}</span>
           </Link>
 
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => window.print()}>
-            <Printer size={15} />
-            <span>{bilingual('पावती प्रिंट करें', 'Print Acknowledgment')}</span>
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            {isAdmin && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{
+                  background: '#dc2626',
+                  color: '#fff',
+                  border: '1px solid #b91c1c',
+                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  cursor: 'pointer'
+                }}
+                onClick={async () => {
+                  if (confirm(bilingual(
+                    `[व्यवस्थापक] क्या आप शिकायत #${complaint.ticket_number} को स्थायी रूप से हटाना (Delete) चाहते हैं?`,
+                    `[Admin] Permanently delete complaint #${complaint.ticket_number}?`
+                  ))) {
+                    await adminDeleteComplaint(complaint.id);
+                    navigate('/complaints');
+                  }
+                }}
+              >
+                <Trash2 size={14} />
+                <span>{bilingual('डिलीट (Admin)', 'Delete (Admin)')}</span>
+              </button>
+            )}
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => window.print()}>
+              <Printer size={15} />
+              <span>{bilingual('पावती प्रिंट करें', 'Print Acknowledgment')}</span>
+            </button>
+          </div>
         </div>
 
         {/* Official Header Banner */}
@@ -245,9 +278,16 @@ export default function ComplaintDetail() {
 
             {/* Description */}
             <div className="card" style={{ marginBottom: '1.25rem' }}>
-              <h3 className="detail-section-title">
-                {bilingual('नागरिक द्वारा प्रस्तुत विवरण', 'Citizen Problem Description')}
-              </h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                <h3 className="detail-section-title" style={{ margin: 0 }}>
+                  {bilingual('नागरिक द्वारा प्रस्तुत विवरण', 'Citizen Problem Description')}
+                </h3>
+                {complaint.is_voice_transcribed && (
+                  <span style={{ fontSize: '0.75rem', color: '#0b3a6d', background: '#eff6ff', padding: '0.2rem 0.6rem', borderRadius: 4, border: '1px solid #bfdbfe', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                    🎙️ {bilingual('बोलकर दर्ज शिकायत (Voice Transcribed)', 'Voice Transcribed Grievance')}
+                  </span>
+                )}
+              </div>
               <p style={{ color: '#1e293b', lineHeight: 1.7, fontSize: '0.95rem' }}>{complaint.description}</p>
             </div>
 
@@ -348,18 +388,7 @@ export default function ComplaintDetail() {
               </div>
             )}
 
-            {/* Saved Citizen Audio Recording (with Public Consent Check) */}
-            {complaint.audio_url && (
-              <div style={{ marginBottom: '1.25rem' }}>
-                <VoiceAudioPlayer
-                  audioUrl={complaint.audio_url}
-                  duration={complaint.audio_duration}
-                  publicConsent={complaint.public_audio_consent !== false}
-                  canPlayAuthorized={false}
-                  title={bilingual('नागरिक वॉइस रिकॉर्डिंग (Citizen Audio Recording)', 'Citizen Voice Recording')}
-                />
-              </div>
-            )}
+
 
             {/* Voice Transcript */}
             {complaint.voice_transcript && (

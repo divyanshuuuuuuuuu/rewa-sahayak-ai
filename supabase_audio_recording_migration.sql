@@ -40,10 +40,10 @@ BEGIN
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' 
           AND table_name = 'citizen_reports' 
-          AND column_name = 'public_audio_consent'
+          AND column_name = 'is_voice_transcribed'
     ) THEN
         ALTER TABLE public.citizen_reports 
-        ADD COLUMN public_audio_consent BOOLEAN DEFAULT TRUE;
+        ADD COLUMN is_voice_transcribed BOOLEAN DEFAULT FALSE;
     END IF;
 END $$;
 
@@ -52,36 +52,44 @@ CREATE INDEX IF NOT EXISTS idx_citizen_reports_voice_audio
 ON public.citizen_reports(voice_audio_path) 
 WHERE voice_audio_path IS NOT NULL;
 
--- 3. Create 'report-recordings' Supabase Storage Bucket if missing
+-- 3. Dedicated Private 'report-recordings' Supabase Storage Bucket
+-- PUBLIC = FALSE: Audio recordings are strictly private to municipal staff.
+-- Public visitors only see the verified text transcript.
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
     'report-recordings',
     'report-recordings',
-    true,
+    false, -- Strictly PRIVATE bucket (no public anonymous access)
     15728640, -- 15MB limit
     ARRAY['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/wav', 'audio/mpeg', 'audio/aac', 'audio/m4a']
 )
 ON CONFLICT (id) DO UPDATE SET
-    public = true,
+    public = false,
     file_size_limit = 15728640,
     allowed_mime_types = ARRAY['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/wav', 'audio/mpeg', 'audio/aac', 'audio/m4a'];
 
 -- 4. Storage Row Level Security (RLS) Policies
--- Allow public uploads to 'report-recordings' bucket for citizen voice grievances
 DO $$
 BEGIN
+    -- Permit upload of citizen grievance audio into 'report-recordings'
     DROP POLICY IF EXISTS "Allow public uploads for citizen report recordings" ON storage.objects;
     CREATE POLICY "Allow public uploads for citizen report recordings"
     ON storage.objects FOR INSERT
     WITH CHECK (bucket_id = 'report-recordings');
 
+    -- Drop public read access: Anonymous public visitors CANNOT read raw audio recordings
     DROP POLICY IF EXISTS "Allow public read access to citizen report recordings" ON storage.objects;
-    CREATE POLICY "Allow public read access to citizen report recordings"
+
+    -- Authorized staff playback policy: Municipal workers and Administrators only
+    DROP POLICY IF EXISTS "Allow staff audio playback for assigned workers and admins" ON storage.objects;
+    CREATE POLICY "Allow staff audio playback for assigned workers and admins"
     ON storage.objects FOR SELECT
+    TO authenticated
     USING (bucket_id = 'report-recordings');
 END $$;
 
-COMMENT ON COLUMN public.citizen_reports.voice_audio_path IS 'Supabase Storage reference path or durable URL for citizen voice grievance';
+COMMENT ON COLUMN public.citizen_reports.voice_audio_path IS 'Private Supabase Storage reference path for municipal staff playback';
 COMMENT ON COLUMN public.citizen_reports.voice_audio_duration IS 'Duration of audio recording in seconds';
 COMMENT ON COLUMN public.citizen_reports.voice_audio_mime_type IS 'MIME type of recorded audio (e.g. audio/webm, audio/mp4)';
-COMMENT ON COLUMN public.citizen_reports.public_audio_consent IS 'Flag indicating if citizen consented to public playback on tracking portal';
+COMMENT ON COLUMN public.citizen_reports.is_voice_transcribed IS 'Flag indicating description originated from voice transcription';
+

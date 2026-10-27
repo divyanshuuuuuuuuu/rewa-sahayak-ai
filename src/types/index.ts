@@ -49,6 +49,7 @@ export interface Complaint {
   audio_duration?: number | null;
   audio_mime_type?: string | null;
   public_audio_consent?: boolean;
+  is_voice_transcribed?: boolean;
   media?: CivicMedia[];
   voice_transcript: string | null;
   ai_summary: string;

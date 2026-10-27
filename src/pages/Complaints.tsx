@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Search, Clock, MapPin, Plus, ShieldCheck, Camera, RefreshCw } from "lucide-react";
+import { Search, Clock, MapPin, Plus, ShieldCheck, Camera, RefreshCw, Trash2 } from "lucide-react";
 import { getPublicReports, getMyCitizenReports, type DbReport } from "../services/supabaseStore";
+import { getAllComplaints, adminDeleteComplaint, isComplaintDeleted } from "../services/store";
 import { statusColors, categoryIcons } from "../services/ai";
 import { useGov } from "../context/GovContext";
 import { useAuth } from "../context/AuthContext";
@@ -14,10 +15,11 @@ const statusKeys = ["SUBMITTED","UNDER_REVIEW","APPROVED","ASSIGNED","IN_PROGRES
 const CATEGORIES = ["Waste Management","Water & Leakage","Waterlogging & Drainage","Roads & Potholes","Streetlights","Public Cleanliness","Sanitation","Government Service Assistance","Other Civic Issue"];
 
 export default function Complaints() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { lang, bilingual, statusLabel, categoryLabel } = useGov();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const moduleParam = searchParams.get("module") || "";
+  const initialSearch = searchParams.get("search") || "";
 
   const [viewMode, setViewMode] = useState<"public" | "mine">("public");
   const [reports, setReports] = useState<DbReport[]>([]);
@@ -30,7 +32,14 @@ export default function Complaints() {
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [moduleFilter, setModuleFilter] = useState(moduleParam);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
+
+  useEffect(() => {
+    const s = searchParams.get("search");
+    if (s !== null && s !== search) {
+      setSearch(s);
+    }
+  }, [searchParams]);
 
   const loadReports = async () => {
     setLoading(true); setError("");
@@ -47,10 +56,61 @@ export default function Complaints() {
           page,
           pageSize: PAGE_SIZE,
         });
-        if (e) { setError(e); } else { setReports(r); setTotal(t); }
+
+        // Merge with local store complaints to guarantee any locally filed complaint is immediately visible
+        const localComplaints = getAllComplaints();
+        const serverTicketSet = new Set((r || []).map((rep) => rep.reference_number || rep.id));
+        const extraLocal: DbReport[] = localComplaints
+          .filter((c) => !serverTicketSet.has(c.ticket_number) && !serverTicketSet.has(c.id))
+          .map((c) => ({
+            id: c.id,
+            reference_number: c.ticket_number,
+            submitted_by: c.citizen_id,
+            citizen_name: c.citizen_name,
+            category: c.category,
+            subcategory: c.subcategory || null,
+            module: c.module,
+            title: c.title,
+            description: c.description,
+            severity: c.severity,
+            area_or_ward: null,
+            location_description: c.address,
+            latitude: c.latitude ?? null,
+            longitude: c.longitude ?? null,
+            before_image_path: c.image_url || null,
+            completion_image_path: c.video_url || null,
+            current_status: c.status,
+            public_visibility: true,
+            ai_summary: c.ai_summary || null,
+            ai_confidence: c.ai_confidence || null,
+            voice_transcript: c.voice_transcript || null,
+            voice_audio_path: c.audio_url || null,
+            voice_audio_duration: c.audio_duration || null,
+            voice_audio_mime_type: c.audio_mime_type || null,
+            public_audio_consent: c.public_audio_consent !== false,
+            assigned_department_id: null,
+            assigned_department_name: c.assigned_department || null,
+            assigned_to: c.assigned_to || null,
+            delay_reason: c.delay_reason || null,
+            resolution_note: c.resolution_note || null,
+            resolved_at: null,
+            submitted_at: c.created_at,
+            updated_at: c.updated_at,
+          }));
+
+        const validRemote = (r || []).filter(rep => !isComplaintDeleted(rep.id));
+        const combined = [...validRemote, ...extraLocal];
+        setReports(combined);
+        setTotal(combined.length);
       }
     } finally { setLoading(false); }
   };
+
+  useEffect(() => {
+    const onUpdate = () => loadReports();
+    window.addEventListener('rewa_store_updated', onUpdate);
+    return () => window.removeEventListener('rewa_store_updated', onUpdate);
+  }, []);
 
   useEffect(() => { loadReports(); }, [viewMode, categoryFilter, moduleFilter, statusFilter, search, page]);
 
@@ -58,7 +118,7 @@ export default function Complaints() {
   useEffect(() => {
     const channel = supabase.channel("public-reports-feed")
       .on("postgres_changes", {
-        event: "UPDATE", schema: "public", table: "citizen_reports",
+        event: "*", schema: "public", table: "citizen_reports",
         filter: "public_visibility=eq.true"
       }, () => { loadReports(); })
       .subscribe();
@@ -69,9 +129,28 @@ export default function Complaints() {
 
   const displayed = useMemo(() => {
     let list = reports.filter(r => !r.removed_from_website);
-    if (viewMode === "mine" && search) {
-      const q = search.toLowerCase();
-      list = list.filter(r => r.title.toLowerCase().includes(q) || r.reference_number.toLowerCase().includes(q) || r.location_description?.toLowerCase().includes(q));
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const qClean = q.replace(/[^a-z0-9]/g, "");
+      const qDigits = q.replace(/[^0-9]/g, "");
+      list = list.filter(r => {
+        const title = (r.title || "").toLowerCase();
+        const ref = (r.reference_number || "").toLowerCase();
+        const refClean = ref.replace(/[^a-z0-9]/g, "");
+        const refDigits = ref.replace(/[^0-9]/g, "");
+        const id = (r.id || "").toLowerCase();
+        const loc = (r.location_description || "").toLowerCase();
+        const desc = (r.description || "").toLowerCase();
+        return (
+          title.includes(q) ||
+          ref.includes(q) ||
+          id.includes(q) ||
+          loc.includes(q) ||
+          desc.includes(q) ||
+          (qClean.length > 0 && refClean.includes(qClean)) ||
+          (qDigits.length >= 4 && refDigits.includes(qDigits))
+        );
+      });
     }
     // Complaints marked as SUBMITTED are placed at the bottom of all complaints
     return [...list].sort((a, b) => {
@@ -81,7 +160,7 @@ export default function Complaints() {
       if (!aIsSubmitted && bIsSubmitted) return -1; // non-SUBMITTED stays at top
       return new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime();
     });
-  }, [reports, search, viewMode]);
+  }, [reports, search]);
 
   return (
     <div className="page fade-in">
@@ -135,9 +214,19 @@ export default function Complaints() {
         <div className="filters-bar">
           <div style={{ flex: 1, position: "relative", minWidth: "220px" }}>
             <Search size={16} style={{ position: "absolute", left: "0.85rem", top: "50%", transform: "translateY(-50%)", color: "#64748b" }} />
-            <input className="form-input" style={{ paddingLeft: "2.5rem" }}
+            <input className="form-input" style={{ paddingLeft: "2.5rem", paddingRight: search ? "2.5rem" : "1rem" }}
               placeholder={bilingual("शिकायत क्रमांक, शीर्षक या वार्ड खोजें...", "Search ticket, title or area...")}
               value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+            {search && (
+              <button
+                type="button"
+                onClick={() => { setSearch(""); setPage(1); }}
+                style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: "1.1rem", padding: "0.2rem" }}
+                title={bilingual("खोज साफ करें", "Clear search")}
+              >
+                ✕
+              </button>
+            )}
           </div>
           {viewMode === "public" && (
             <>
@@ -207,6 +296,40 @@ export default function Complaints() {
                         <span className="badge" style={{ background: r.severity === "HIGH" ? "#fee2e2" : r.severity === "MEDIUM" ? "#fef3c7" : "#f0fdf4", color: r.severity === "HIGH" ? "#dc2626" : r.severity === "MEDIUM" ? "#d97706" : "#15803d", border: `1px solid ${r.severity === "HIGH" ? "#fca5a5" : r.severity === "MEDIUM" ? "#fde68a" : "#bbf7d0"}`, fontSize: "0.72rem", padding: "0.2rem 0.55rem" }}>
                           {r.severity}
                         </span>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            style={{
+                              padding: "0.15rem 0.45rem",
+                              fontSize: "0.7rem",
+                              background: "#dc2626",
+                              color: "#ffffff",
+                              border: "none",
+                              borderRadius: 4,
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.2rem",
+                            }}
+                            title="Admin Delete"
+                            onClick={async (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (confirm(bilingual(
+                                `[व्यवस्थापक] क्या आप शिकायत #${r.reference_number} को स्थायी रूप से हटाना (Delete) चाहते हैं?`,
+                                `[Admin] Permanently delete complaint #${r.reference_number}?`
+                              ))) {
+                                setReports(prev => prev.filter(rep => rep.id !== r.id && rep.reference_number !== r.reference_number));
+                                await adminDeleteComplaint(r.id);
+                              }
+                            }}
+                          >
+                            <Trash2 size={11} />
+                            <span>{bilingual("डिलीट", "Delete")}</span>
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -241,9 +364,9 @@ export default function Complaints() {
                             <Camera size={12} /> {bilingual("फोटो साक्ष्य", "Photo Attached")}
                           </span>
                         )}
-                        {r.voice_audio_path && (
+                        {(r.voice_audio_path || (r as any).is_voice_transcribed) && (
                           <span style={{ fontSize: "0.72rem", color: "#0b3a6d", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.25rem", background: "#eff6ff", padding: "0.15rem 0.5rem", borderRadius: 4, border: "1px solid #bfdbfe" }}>
-                            🎙️ {bilingual("वॉइस", "Voice Attached")}
+                            🎙️ {bilingual("बोलकर दर्ज (Voice Transcribed)", "Voice Transcribed")}
                           </span>
                         )}
                       </div>

@@ -71,10 +71,9 @@ export function dbReportToComplaint(r: any, history: any[] = []): Complaint {
     audio_url,
     audio_duration: r.voice_audio_duration ?? r.audio_duration ?? null,
     audio_mime_type: r.voice_audio_mime_type ?? r.audio_mime_type ?? null,
-    public_audio_consent: r.public_audio_consent !== false,
+    is_voice_transcribed: !!(r.voice_audio_path || r.voice_transcript || (r as any).is_voice_transcribed),
     media: [
       ...(image_url ? [{ id: 'm1', type: 'image' as const, url: image_url, name: 'Evidence Photo' }] : []),
-      ...(audio_url ? [{ id: 'm-audio', type: 'audio' as const, url: audio_url, name: 'Voice Complaint', duration: r.voice_audio_duration }] : []),
     ],
     voice_transcript: r.voice_transcript || null,
     ai_summary: r.ai_summary || r.description,
@@ -119,8 +118,46 @@ function saveComplaintsToStorage(complaints: Complaint[]) {
   } catch { /* ignore */ }
 }
 
-// In-memory cache
-let memoryComplaints: Complaint[] = loadComplaintsFromStorage();
+const DELETED_IDS_KEY = 'rewa_deleted_complaints';
+
+export function getDeletedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_IDS_KEY);
+    if (!raw) return new Set();
+    const list: string[] = JSON.parse(raw);
+    // Sanitize: ONLY valid UUIDs are tombstones. Ticket numbers must never block new complaints.
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const validUuids = list.filter(item => uuidRegex.test(item));
+    if (validUuids.length !== list.length) {
+      localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(validUuids));
+    }
+    return new Set(validUuids.map(s => s.toLowerCase()));
+  } catch {
+    return new Set();
+  }
+}
+
+export function recordDeletedId(id: string) {
+  try {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (id && uuidRegex.test(id)) {
+      const set = getDeletedIds();
+      set.add(id.toLowerCase());
+      localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(Array.from(set)));
+    }
+  } catch {}
+}
+
+export function isComplaintDeleted(id: string): boolean {
+  if (!id) return false;
+  const set = getDeletedIds();
+  return set.has(id.toLowerCase());
+}
+
+// In-memory cache (excluding permanently deleted items by UUID)
+let memoryComplaints: Complaint[] = loadComplaintsFromStorage().filter(
+  c => !isComplaintDeleted(c.id)
+);
 
 // Trigger initial sync with Supabase
 export async function syncFromSupabase(): Promise<Complaint[]> {
@@ -135,11 +172,26 @@ export async function syncFromSupabase(): Promise<Complaint[]> {
       return memoryComplaints;
     }
 
-    if (data) {
-      const mapped = data.map((r: any) => dbReportToComplaint(r, r.report_status_history || []));
-      memoryComplaints = mapped;
-      saveComplaintsToStorage(mapped);
-      return mapped;
+    if (data && data.length > 0) {
+      const deleted = getDeletedIds();
+      const mapped = data
+        .filter((r: any) => !deleted.has((r.id || '').toLowerCase()))
+        .map((r: any) => dbReportToComplaint(r, r.report_status_history || []));
+      // Preserve any un-synced local complaints so they don't get erased
+      const serverIds = new Set(mapped.map(m => m.id));
+      const serverTicketNumbers = new Set(mapped.map(m => m.ticket_number));
+      const unSynced = memoryComplaints.filter(c =>
+        !deleted.has(c.id.toLowerCase()) &&
+        !serverIds.has(c.id) &&
+        !serverTicketNumbers.has(c.ticket_number)
+      );
+      const merged = sortComplaints([...mapped, ...unSynced]);
+      memoryComplaints = merged;
+      saveComplaintsToStorage(merged);
+      return merged;
+    } else if (data && data.length === 0) {
+      // If server has no records yet, keep locally cached complaints active
+      return memoryComplaints;
     }
   } catch (err) {
     console.warn('Error during Supabase sync:', err);
@@ -194,11 +246,53 @@ export function getPublicComplaints(): Complaint[] {
 }
 
 export function getComplaintById(id: string): Complaint | undefined {
+  if (!id) return undefined;
   const list = getAllComplaints();
-  const searchId = id.trim().toLowerCase();
-  return list.find(
-    c => c.id.toLowerCase() === searchId || c.ticket_number.toLowerCase() === searchId
-  );
+  const raw = id.trim().toLowerCase();
+  const clean = raw.replace(/[^a-z0-9]/g, '');
+
+  return list.find(c => {
+    const cId = (c.id || '').toLowerCase();
+    const cTicket = (c.ticket_number || '').toLowerCase();
+    const cClean = cTicket.replace(/[^a-z0-9]/g, '');
+
+    if (cId === raw || cTicket === raw) return true;
+    if (clean && (cClean === clean || cId === clean)) return true;
+    if (clean.length >= 4 && (cClean.endsWith(clean) || cClean.includes(clean))) return true;
+    return false;
+  });
+}
+
+export async function fetchComplaintByIdAsync(id: string): Promise<Complaint | undefined> {
+  if (!id) return undefined;
+  let found = getComplaintById(id);
+  if (found) return found;
+
+  await syncFromSupabase();
+  found = getComplaintById(id);
+  if (found) return found;
+
+  try {
+    const raw = id.trim();
+    const { data } = await supabase
+      .from('citizen_reports')
+      .select('*, report_status_history(*)')
+      .or(`id.eq.${raw},reference_number.ilike.%${raw}%`)
+      .limit(1)
+      .maybeSingle();
+
+    if (data) {
+      const c = dbReportToComplaint(data, data.report_status_history || []);
+      if (!memoryComplaints.some(m => m.id === c.id)) {
+        memoryComplaints = sortComplaints([...memoryComplaints, c]);
+        saveComplaintsToStorage(memoryComplaints);
+      }
+      return c;
+    }
+  } catch (err) {
+    console.warn('fetchComplaintByIdAsync warning:', err);
+  }
+  return undefined;
 }
 
 export async function adminRemoveComplaintFromWebsite(
@@ -295,6 +389,44 @@ export async function adminRestoreComplaintToWebsite(
   }
 }
 
+export async function adminDeleteComplaint(
+  complaintIdOrTicket: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const raw = complaintIdOrTicket.trim();
+    const list = getAllComplaints();
+    const target = list.find(c => c.id === raw || c.ticket_number === raw);
+    const targetId = target?.id || raw;
+    const targetTicket = target?.ticket_number;
+
+    // 1. Permanently record deletion key so it never syncs back
+    recordDeletedId(targetId);
+
+    // 2. Remove immediately from memory and local storage (Optimistic: 0ms lag)
+    memoryComplaints = memoryComplaints.filter(
+      c => c.id !== targetId && c.id !== raw && c.ticket_number !== raw && (!targetTicket || c.ticket_number !== targetTicket)
+    );
+    saveComplaintsToStorage(memoryComplaints);
+
+    // 3. Delete from Supabase in background
+    try {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!target && !uuidRegex.test(raw)) {
+        const { data } = await supabase.from('citizen_reports').select('id').eq('reference_number', raw).maybeSingle();
+        if (data?.id) recordDeletedId(data.id);
+      }
+      await supabase.from('report_status_history').delete().eq('report_id', targetId);
+      await supabase.from('citizen_reports').delete().or(`id.eq.${targetId},reference_number.eq.${raw}`);
+    } catch (e) {
+      console.warn('Supabase delete warning (local removal successful):', e);
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to delete complaint' };
+  }
+}
+
 export function getComplaintsByModule(module: string): Complaint[] {
   return getAllComplaints().filter(c => c.module === module);
 }
@@ -308,8 +440,141 @@ export function getComplaintsByCitizen(citizenId: string): Complaint[] {
 }
 
 export function generateTicketNumber(): string {
-  const count = memoryComplaints.length + 1001;
-  return `REW-2026-${String(count).padStart(5, '0')}`;
+  const rand = Math.floor(20000 + Math.random() * 79999);
+  return `REW-2026-${rand}`;
+}
+
+export async function createComplaintAsync(
+  complaint: Omit<Complaint, 'id' | 'ticket_number' | 'created_at' | 'updated_at' | 'updates'>
+): Promise<Complaint> {
+  const tempId = uuidv4();
+  const ticket_number = generateTicketNumber();
+  const now = new Date().toISOString();
+
+  let finalId = tempId;
+  let finalTicket = ticket_number;
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Note: Do not pass reference_number explicitly; Supabase trigger assigns the canonical unique sequence
+    const insertPayload: any = {
+      title: complaint.title,
+      description: complaint.description,
+      category: complaint.category,
+      subcategory: complaint.subcategory || null,
+      module: complaint.module,
+      severity: complaint.severity || 'MEDIUM',
+      current_status: 'SUBMITTED',
+      citizen_name: complaint.citizen_name || 'नागरिक (रीवा)',
+      submitted_by: user?.id ?? null,
+      location_description: complaint.address || 'रीवा नगर निगम क्षेत्र',
+      latitude: complaint.latitude ?? 24.5373,
+      longitude: complaint.longitude ?? 81.3005,
+      before_image_path: complaint.image_url,
+      ai_summary: complaint.ai_summary,
+      ai_confidence: complaint.ai_confidence,
+      voice_transcript: complaint.voice_transcript,
+      voice_audio_path: complaint.audio_url || null,
+      voice_audio_duration: complaint.audio_duration || null,
+      voice_audio_mime_type: complaint.audio_mime_type || null,
+      is_voice_transcribed: !!(complaint.is_voice_transcribed || complaint.audio_url || complaint.voice_transcript),
+      public_visibility: true,
+    };
+
+    let { data, error } = await supabase
+      .from('citizen_reports')
+      .insert(insertPayload)
+      .select()
+      .single();
+
+    if (
+      error &&
+      ((error as any).code === 'PGRST204' ||
+        error.message?.toLowerCase().includes('column') ||
+        error.message?.toLowerCase().includes('schema cache') ||
+        error.message?.toLowerCase().includes('not find') ||
+        error.message?.toLowerCase().includes('does not exist'))
+    ) {
+      delete insertPayload.voice_audio_path;
+      delete insertPayload.voice_audio_duration;
+      delete insertPayload.voice_audio_mime_type;
+      delete (insertPayload as any).public_audio_consent;
+      delete insertPayload.is_voice_transcribed;
+      const retry = await supabase
+        .from('citizen_reports')
+        .insert(insertPayload)
+        .select()
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
+
+    // If Postgres sequence collided with an existing manual ticket number, advance or use fallback ticket
+    if (error && (error as any).code === '23505') {
+      const retry = await supabase
+        .from('citizen_reports')
+        .insert(insertPayload)
+        .select()
+        .single();
+      if (!retry.error) {
+        data = retry.data;
+        error = null;
+      } else {
+        insertPayload.reference_number = generateTicketNumber();
+        const fallback = await supabase
+          .from('citizen_reports')
+          .insert(insertPayload)
+          .select()
+          .single();
+        data = fallback.data;
+        error = fallback.error;
+      }
+    }
+
+    if (!error && data) {
+      finalId = data.id;
+      finalTicket = data.reference_number || ticket_number;
+
+      try {
+        await supabase.from('report_status_history').insert({
+          report_id: data.id,
+          previous_status: null,
+          new_status: 'SUBMITTED',
+          public_message: 'Complaint registered in municipal database.',
+          changed_by_name: 'System',
+        });
+      } catch (histErr) {
+        console.warn('Status history insert error:', histErr);
+      }
+    } else if (error) {
+      console.warn('Failed to insert report to Supabase, saving locally:', error.message);
+    }
+  } catch (e) {
+    console.warn('Network issue during report insert, saving locally:', e);
+  }
+
+  const newComplaint: Complaint = {
+    ...complaint,
+    id: finalId,
+    ticket_number: finalTicket,
+    created_at: now,
+    updated_at: now,
+    updates: [
+      {
+        id: uuidv4(),
+        complaint_id: finalId,
+        status: 'SUBMITTED',
+        note: 'Complaint submitted by citizen via Rewa Sahayak AI',
+        updated_by: 'System',
+        created_at: now,
+      },
+    ],
+  };
+
+  memoryComplaints = sortComplaints([newComplaint, ...memoryComplaints.filter(c => c.id !== finalId && c.ticket_number !== finalTicket)]);
+  saveComplaintsToStorage(memoryComplaints);
+  return newComplaint;
 }
 
 export function createComplaint(
@@ -337,82 +602,13 @@ export function createComplaint(
     ],
   };
 
-  // Update memory and storage immediately for optimistic UI (SUBMITTED placed at the bottom)
-  memoryComplaints = sortComplaints([...memoryComplaints, newComplaint]);
+  memoryComplaints = sortComplaints([newComplaint, ...memoryComplaints]);
   saveComplaintsToStorage(memoryComplaints);
 
-  // Asynchronously insert into Supabase
-  (async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      const insertPayload: any = {
-        title: newComplaint.title,
-        description: newComplaint.description,
-        category: newComplaint.category,
-        subcategory: newComplaint.subcategory || null,
-        module: newComplaint.module,
-        severity: newComplaint.severity || 'MEDIUM',
-        current_status: 'SUBMITTED',
-        citizen_name: newComplaint.citizen_name || 'नागरिक (रीवा)',
-        submitted_by: user?.id ?? null,
-        location_description: newComplaint.address,
-        latitude: newComplaint.latitude,
-        longitude: newComplaint.longitude,
-        before_image_path: newComplaint.image_url,
-        ai_summary: newComplaint.ai_summary,
-        ai_confidence: newComplaint.ai_confidence,
-        voice_transcript: newComplaint.voice_transcript,
-        voice_audio_path: newComplaint.audio_url || null,
-        voice_audio_duration: newComplaint.audio_duration || null,
-        voice_audio_mime_type: newComplaint.audio_mime_type || null,
-        public_audio_consent: newComplaint.public_audio_consent !== false,
-        public_visibility: true, // Auto-visible on public tracker
-      };
-
-      let { data, error } = await supabase
-        .from('citizen_reports')
-        .insert(insertPayload)
-        .select()
-        .single();
-
-      // If database table citizen_reports lacks the audio columns before migration runs, retry without them safely
-      if (error && error.message.toLowerCase().includes('column') && error.message.toLowerCase().includes('does not exist')) {
-        delete insertPayload.voice_audio_path;
-        delete insertPayload.voice_audio_duration;
-        delete insertPayload.voice_audio_mime_type;
-        delete insertPayload.public_audio_consent;
-        const retry = await supabase
-          .from('citizen_reports')
-          .insert(insertPayload)
-          .select()
-          .single();
-        data = retry.data;
-        error = retry.error;
-      }
-
-      if (!error && data) {
-        // Record status history
-        await supabase.from('report_status_history').insert({
-          report_id: data.id,
-          previous_status: null,
-          new_status: 'SUBMITTED',
-          public_message: 'Complaint registered in municipal database.',
-          changed_by_name: 'System',
-        });
-
-        // Replace tempId with real Supabase record
-        newComplaint.id = data.id;
-        newComplaint.ticket_number = data.reference_number || ticket_number;
-        newComplaint.updates[0].complaint_id = data.id;
-        saveComplaintsToStorage(memoryComplaints);
-      } else if (error) {
-        console.error('Failed to sync new complaint to Supabase:', error.message);
-      }
-    } catch (e) {
-      console.error('Error inserting report to Supabase:', e);
-    }
-  })();
+  createComplaintAsync(complaint).then(realComplaint => {
+    memoryComplaints = sortComplaints([realComplaint, ...memoryComplaints.filter(c => c.id !== tempId && c.id !== realComplaint.id)]);
+    saveComplaintsToStorage(memoryComplaints);
+  });
 
   return newComplaint;
 }

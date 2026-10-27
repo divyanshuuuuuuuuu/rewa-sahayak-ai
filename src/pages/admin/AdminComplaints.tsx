@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, MapPin, Eye, EyeOff } from 'lucide-react';
-import { getAllComplaints, syncFromSupabase, adminRemoveComplaintFromWebsite, adminRestoreComplaintToWebsite } from '../../services/store';
+import { getAllComplaints, syncFromSupabase, adminRemoveComplaintFromWebsite, adminRestoreComplaintToWebsite, adminDeleteComplaint } from '../../services/store';
 import { statusColors, severityColors, moduleColors, categoryIcons } from '../../services/ai';
 import { useGov } from '../../context/GovContext';
 
@@ -183,9 +183,26 @@ export default function AdminComplaints() {
                               }
                             }}
                           >
-                            🗑️ हटाएं
+                            🚫 छुपाएं
                           </button>
                         )}
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem', background: '#dc2626', color: '#ffffff', border: '1px solid #b91c1c', fontWeight: 700 }}
+                          title={bilingual('शिकायत हमेशा के लिए डिलीट करें', 'Permanently delete complaint')}
+                          onClick={async () => {
+                            if (confirm(bilingual(
+                              `क्या आप शिकायत #${c.ticket_number} को पूर्णतः डिलीट करना चाहते हैं?`,
+                              `Permanently delete complaint #${c.ticket_number}?`
+                            ))) {
+                              setAllComplaints(prev => prev.filter(item => item.id !== c.id && item.ticket_number !== c.ticket_number));
+                              await adminDeleteComplaint(c.id);
+                            }
+                          }}
+                        >
+                          🗑️ {bilingual('डिलीट', 'Delete')}
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -275,9 +292,26 @@ export default function AdminComplaints() {
                           }
                         }}
                       >
-                        🗑️ हटाएं
+                        🚫 छुपाएं
                       </button>
                     )}
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{ padding: '0.3rem 0.6rem', fontSize: '0.74rem', background: '#dc2626', color: '#ffffff', border: '1px solid #b91c1c', fontWeight: 700 }}
+                      title={bilingual('शिकायत हमेशा के लिए डिलीट करें', 'Permanently delete complaint')}
+                      onClick={async () => {
+                        if (confirm(bilingual(
+                          `क्या आप शिकायत #${c.ticket_number} को पूर्णतः डिलीट करना चाहते हैं?`,
+                          `Permanently delete complaint #${c.ticket_number}?`
+                        ))) {
+                          setAllComplaints(prev => prev.filter(item => item.id !== c.id && item.ticket_number !== c.ticket_number));
+                          await adminDeleteComplaint(c.id);
+                        }
+                      }}
+                    >
+                      🗑️ {bilingual('डिलीट', 'Delete')}
+                    </button>
                   </div>
                 </div>
               </div>

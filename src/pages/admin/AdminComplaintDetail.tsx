@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Sparkles, Clock, Film, Video, Camera, Upload, CheckCircle2, Eye, EyeOff, MessageSquare, Download, Share2, PhoneCall, HardHat, RotateCcw } from 'lucide-react';
 import {
   getComplaintById, updateComplaintStatus, assignComplaint, reopenComplaint, updateComplaintPriority,
-  syncFromSupabase, adminRemoveComplaintFromWebsite, adminRestoreComplaintToWebsite
+  syncFromSupabase, adminRemoveComplaintFromWebsite, adminRestoreComplaintToWebsite, adminDeleteComplaint
 } from '../../services/store';
 import { uploadReportImage, getImageUrl } from '../../services/supabaseStore';
 import {
@@ -28,6 +28,7 @@ import { logAudit } from '../../services/departmentAccountService';
 
 export default function AdminComplaintDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { lang, bilingual, statusLabel, moduleLabel, categoryLabel } = useGov();
   const [complaint, setComplaint] = useState(id ? getComplaintById(id) : undefined);
   const [loading, setLoading] = useState(!complaint);
@@ -330,6 +331,17 @@ export default function AdminComplaintDetail() {
       alert(res.error || 'Failed to restore complaint to website');
     }
     setRemovingFromSite(false);
+  };
+
+  const handlePermanentDelete = async () => {
+    if (!complaint) return;
+    if (confirm(bilingual(
+      `चेतावनी: क्या आप शिकायत #${complaint.ticket_number} को पूर्णतः डिलीट करना चाहते हैं? यह रिकॉर्ड डेटाबेस व सिस्टम से हमेशा के लिए मिटा दिया जाएगा।`,
+      `WARNING: Permanently delete complaint #${complaint.ticket_number}? This will permanently erase the complaint record from the database and system.`
+    ))) {
+      await adminDeleteComplaint(complaint.id);
+      navigate('/admin/complaints');
+    }
   };
 
   return (
@@ -660,10 +672,19 @@ export default function AdminComplaintDetail() {
                     type="button"
                     id="admin-remove-from-site-btn"
                     className="btn btn-secondary btn-sm"
-                    style={{ width: '100%', justifyContent: 'center', background: '#dc2626', color: '#ffffff', borderColor: '#b91c1c', fontWeight: 700 }}
+                    style={{ width: '100%', justifyContent: 'center', background: '#ea580c', color: '#ffffff', borderColor: '#c2410c', fontWeight: 700 }}
                     onClick={() => setShowRemovalModal(true)}
                   >
-                    {bilingual('🗑️ वेबसाइट से हटाएं (Remove from Website)', 'Remove from Public Website')}
+                    {bilingual('🚫 वेबसाइट से छुपाएं (Hide from Website)', 'Hide from Public Website')}
+                  </button>
+                  <button
+                    type="button"
+                    id="admin-delete-permanent-btn"
+                    className="btn btn-sm"
+                    style={{ width: '100%', justifyContent: 'center', background: '#dc2626', color: '#ffffff', border: '1px solid #b91c1c', fontWeight: 800, marginTop: '0.45rem' }}
+                    onClick={handlePermanentDelete}
+                  >
+                    {bilingual('🗑️ पूर्णतः डिलीट करें (Permanent Delete)', 'Permanent Delete Complaint')}
                   </button>
                 </div>
               )}

@@ -29,7 +29,8 @@ export default function VoiceAudioPlayer({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isPlayable = canPlayAuthorized || publicConsent;
+  // Audio playback is strictly restricted to authorized municipal workers and administrators
+  const isPlayable = Boolean(canPlayAuthorized);
 
   useEffect(() => {
     const audio = audioRef.current;
