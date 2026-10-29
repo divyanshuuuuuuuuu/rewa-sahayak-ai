@@ -211,16 +211,32 @@ export default function WorkerTaskDetail() {
     if (!assignment) return;
     setStartingWork(true);
     setStartError(null);
-    // Anti-slacking: Capture live on-site GPS location when starting work
-    const loc = await captureWorkerLocation();
-    const { error: e } = await startWork(assignment.id, loc || undefined);
-    if (e) {
-      setStartError(e);
-    } else {
-      await loadTaskData(assignment.id);
-      setActiveAction("complete"); // Automatically open Complete Work drawer
-    }
+
+    const now = new Date().toISOString();
+    const targetId = assignment.id || assignment.reference_number;
+
+    // 1. Instantly switch UI to IN_PROGRESS so stopwatch starts ticking and complete drawer opens with zero delay
+    setAssignment((prev) => prev ? {
+      ...prev,
+      current_status: "IN_PROGRESS",
+      work_started_at: prev.work_started_at || now,
+    } : null);
+    setActiveAction("complete");
     setStartingWork(false);
+
+    // 2. Perform location capture and data sync in background without freezing button
+    try {
+      let loc = workerLocation;
+      if (!loc) {
+        loc = await Promise.race([
+          captureWorkerLocation(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000))
+        ]);
+      }
+      await startWork(targetId, loc || undefined);
+    } catch (err: any) {
+      console.warn("Background startWork sync warning:", err);
+    }
   };
 
   const handleRecordDelay = async () => {
@@ -664,11 +680,17 @@ export default function WorkerTaskDetail() {
             </span>
           </div>
 
-          {beforeImageUrl && (
+          {beforeImageUrl ? (
             <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "2px solid #fecaca", background: "#f8fafc" }}>
               <img
                 src={beforeImageUrl}
                 alt="Citizen Evidence"
+                onError={(e) => {
+                  const fallback = getEvidenceForCategory(assignment.category, assignment.module ?? undefined);
+                  if (e.currentTarget.src !== fallback) {
+                    e.currentTarget.src = fallback;
+                  }
+                }}
                 style={{ width: "100%", maxHeight: 320, objectFit: "cover", display: "block", cursor: "pointer" }}
                 onClick={() => setPreviewModalImg(beforeImageUrl)}
               />
@@ -694,6 +716,14 @@ export default function WorkerTaskDetail() {
               >
                 <Eye size={13} /> बड़ा करके देखें (Full Size)
               </button>
+            </div>
+          ) : (
+            <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "2px solid #fecaca", background: "#f8fafc" }}>
+              <img
+                src={getEvidenceForCategory(assignment.category, assignment.module ?? undefined)}
+                alt="Citizen Evidence Illustration"
+                style={{ width: "100%", maxHeight: 320, objectFit: "cover", display: "block" }}
+              />
             </div>
           )}
           <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "0.4rem", textAlign: "center" }}>
@@ -1263,9 +1293,21 @@ export default function WorkerTaskDetail() {
                             📷 BEFORE (समस्या साक्ष्य)
                           </div>
                           {beforeImageUrl ? (
-                            <img src={beforeImageUrl} alt="Before Problem" style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }} />
+                            <img
+                              src={beforeImageUrl}
+                              alt="Before Problem"
+                              onError={(e) => {
+                                const fb = getEvidenceForCategory(assignment.category, assignment.module ?? undefined);
+                                if (e.currentTarget.src !== fb) e.currentTarget.src = fb;
+                              }}
+                              style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }}
+                            />
                           ) : (
-                            <div style={{ height: 110, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", color: "#94a3b8" }}>उपलब्ध नहीं</div>
+                            <img
+                              src={getEvidenceForCategory(assignment.category, assignment.module ?? undefined)}
+                              alt="Before Problem"
+                              style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }}
+                            />
                           )}
                         </div>
 

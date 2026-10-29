@@ -139,6 +139,10 @@ export function getImageUrl(
   path: string,
   bucket: "report-images" | "completion-images" = "report-images"
 ): string {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:') || path.startsWith('blob:')) {
+    return path;
+  }
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }

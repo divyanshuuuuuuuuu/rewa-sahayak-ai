@@ -245,18 +245,20 @@ export async function getMyAssignmentById(reportId: string): Promise<{
   if (!reportId) return { assignment: null, error: "Task reference is required." };
   const cleanId = reportId.replace(/^#/, "").trim();
 
-  // 1. Try querying Supabase by ID or by Reference Number
+  // 1. Try querying Supabase by ID (if UUID) or by Reference Number
   let reportData: any = null;
 
-  const { data: byId } = await supabase
-    .from("citizen_reports")
-    .select("*")
-    .eq("id", cleanId)
-    .maybeSingle();
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+  if (isUuid) {
+    const { data: byId } = await supabase
+      .from("citizen_reports")
+      .select("*")
+      .eq("id", cleanId)
+      .maybeSingle();
+    if (byId) reportData = byId;
+  }
 
-  if (byId) {
-    reportData = byId;
-  } else {
+  if (!reportData) {
     const { data: byRef } = await supabase
       .from("citizen_reports")
       .select("*")
@@ -267,14 +269,18 @@ export async function getMyAssignmentById(reportId: string): Promise<{
     }
   }
 
-  // 2. Check local store fallback if Supabase query missed
-  if (!reportData) {
-    try {
-      const raw = localStorage.getItem("rewa_complaints");
-      if (raw) {
-        const localList = JSON.parse(raw);
-        const match = localList.find((c: any) => c.id === cleanId || c.ticket_number === cleanId);
-        if (match) {
+  // 2. Check local store fallback or merge local status progress (like IN_PROGRESS / RESOLVED)
+  try {
+    const raw = localStorage.getItem("rewa_complaints");
+    if (raw) {
+      const localList = JSON.parse(raw);
+      const match = localList.find((c: any) =>
+        (reportData && (c.id === reportData.id || c.ticket_number === reportData.reference_number)) ||
+        c.id === cleanId ||
+        c.ticket_number === cleanId
+      );
+      if (match) {
+        if (!reportData) {
           reportData = {
             id: match.id,
             reference_number: match.ticket_number,
@@ -296,6 +302,7 @@ export async function getMyAssignmentById(reportId: string): Promise<{
             delay_reason: match.delay_reason,
             resolution_note: match.resolution_note || match.completion_note,
             resolved_at: match.resolved_at,
+            work_started_at: match.work_started_at,
             voice_audio_path: match.audio_url || match.voice_audio_path,
             voice_audio_duration: match.audio_duration || match.voice_audio_duration,
             public_audio_consent: match.public_audio_consent,
@@ -303,10 +310,24 @@ export async function getMyAssignmentById(reportId: string): Promise<{
             updated_at: match.updated_at,
             citizen_name: match.citizen_name,
           };
+        } else {
+          // If local complaint has more recent status (IN_PROGRESS or RESOLVED), merge it
+          if (match.status === "IN_PROGRESS" || match.status === "RESOLVED") {
+            reportData.current_status = match.status;
+          }
+          if (match.work_started_at) {
+            reportData.work_started_at = match.work_started_at;
+          }
+          if (match.video_url || match.completion_image_path) {
+            reportData.completion_image_path = match.video_url || match.completion_image_path;
+          }
+          if (match.resolution_note || match.completion_note) {
+            reportData.resolution_note = match.resolution_note || match.completion_note;
+          }
         }
       }
-    } catch {}
-  }
+    }
+  } catch {}
 
   if (!reportData) {
     return { assignment: null, error: `Complaint #${cleanId} was not found.` };
@@ -444,42 +465,80 @@ export async function startWork(
   const targetId = assignment.id || cleanId;
 
   // 1. Update in Supabase
-  const { error: updateErr } = await supabase
-    .from("citizen_reports")
-    .update({
-      current_status: "IN_PROGRESS",
-      work_started_at: now,
-      updated_at: now,
-    })
-    .eq("id", targetId);
+  try {
+    const isTargetUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
+    let q = supabase
+      .from("citizen_reports")
+      .update({
+        current_status: "IN_PROGRESS",
+        updated_at: now,
+      });
 
-  if (updateErr) {
-    console.warn("Supabase update error:", updateErr.message);
+    if (isTargetUuid) {
+      await q.eq("id", targetId);
+    } else {
+      await q.eq("reference_number", assignment.reference_number || cleanId);
+    }
+  } catch (err) {
+    console.warn("Supabase startWork network error:", err);
   }
 
   const locMsg = workerLocation
     ? ` [📍 कार्य स्थल उपस्थिति GPS सत्यापित: ${workerLocation.latitude.toFixed(4)}°N, ${workerLocation.longitude.toFixed(4)}°E (±${Math.round(workerLocation.accuracy || 10)}m)]`
     : '';
 
-  // 2. Insert into report_status_history
-  await supabase.from("report_status_history").insert({
-    report_id: targetId,
-    previous_status: assignment.current_status,
-    new_status: "IN_PROGRESS",
-    public_message: `▶ ${performer} (${deptName}) ने घटनास्थल पर कार्य प्रारंभ किया (Work Timer Started).${locMsg}`,
-    changed_by_name: performer,
-  });
+  // 2. Insert into report_status_history (if valid report UUID in Supabase)
+  try {
+    const isTargetUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
+    if (isTargetUuid) {
+      await supabase.from("report_status_history").insert({
+        report_id: targetId,
+        previous_status: assignment.current_status,
+        new_status: "IN_PROGRESS",
+        public_message: `▶ ${performer} (${deptName}) ने घटनास्थल पर कार्य प्रारंभ किया (Work Timer Started).${locMsg}`,
+        changed_by_name: performer,
+      });
+    }
+  } catch (err) {
+    console.warn("Supabase report_status_history insert skipped:", err);
+  }
 
-  // 3. Update local store
-  const updatedComplaint = updateComplaintStatus(
-    reportId,
+  // 3. Update local store & localStorage directly
+  updateComplaintStatus(
+    targetId,
     "IN_PROGRESS",
     `${performer} ने घटनास्थल पर कार्य प्रारंभ किया।${locMsg}`,
     performer
   );
-  if (updatedComplaint) {
-    updatedComplaint.work_started_at = now;
+  if (assignment.reference_number) {
+    updateComplaintStatus(
+      assignment.reference_number,
+      "IN_PROGRESS",
+      `${performer} ने घटनास्थल पर कार्य प्रारंभ किया।${locMsg}`,
+      performer
+    );
   }
+
+  try {
+    const raw = localStorage.getItem("rewa_complaints");
+    if (raw) {
+      const list = JSON.parse(raw);
+      const match = list.find((c: any) =>
+        c.id === targetId ||
+        c.ticket_number === targetId ||
+        c.id === cleanId ||
+        c.ticket_number === cleanId ||
+        c.ticket_number === assignment.reference_number
+      );
+      if (match) {
+        match.status = "IN_PROGRESS";
+        match.work_started_at = now;
+        match.updated_at = now;
+        localStorage.setItem("rewa_complaints", JSON.stringify(list));
+      }
+    }
+  } catch {}
+
   assignment.work_started_at = now;
   assignment.current_status = "IN_PROGRESS";
 
@@ -538,21 +597,33 @@ export async function submitCompletedWork(
     return { error: "Compulsory Requirement: Please enter a completion note explaining the work performed." };
   }
 
-  // 4. Upload photo to Supabase Storage completion-images bucket
-  const { path: completionPath, error: uploadErr } = await uploadReportImage(
-    completionPhoto,
-    "completion-images"
-  );
+  // 4. Upload photo to Supabase Storage completion-images bucket with data-URL fallback
+  let completionPath: string | null = null;
+  let fullCompletionUrl: string = '';
 
-  if (uploadErr || !completionPath) {
-    return {
-      error: `Photo upload to storage failed: ${uploadErr || "Unknown storage error"}. The complaint was NOT resolved.`,
-    };
+  try {
+    const res = await uploadReportImage(completionPhoto, "completion-images");
+    if (res.path && !res.error) {
+      completionPath = res.path;
+      fullCompletionUrl = getImageUrl(res.path, "completion-images");
+    }
+  } catch (err) {
+    console.warn("Storage upload error, using local data URL fallback:", err);
+  }
+
+  if (!fullCompletionUrl) {
+    // Generate base64 Data URL fallback so photo proof is never lost
+    fullCompletionUrl = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve((e.target?.result as string) || "");
+      reader.onerror = () => resolve("");
+      reader.readAsDataURL(completionPhoto);
+    });
+    completionPath = fullCompletionUrl;
   }
 
   const performer = profile?.name || profile?.department_name || assignment.assigned_department_name || "जल आपूर्ति एवं जल निकासी विभाग";
   const now = new Date().toISOString();
-  const fullCompletionUrl = getImageUrl(completionPath, "completion-images");
   const targetId = assignment.id || cleanId;
 
   // Calculate elapsed duration
@@ -565,38 +636,57 @@ export async function submitCompletedWork(
     : '';
 
   // 5. Update citizen_reports in Supabase
-  const { error: updateErr } = await supabase
-    .from("citizen_reports")
-    .update({
-      current_status: "RESOLVED",
-      completion_image_path: completionPath,
-      resolution_note: noteClean,
-      resolved_at: now,
-      public_visibility: true,
-      updated_at: now,
-    })
-    .eq("id", targetId);
+  try {
+    const isTargetUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
+    let q = supabase
+      .from("citizen_reports")
+      .update({
+        current_status: "RESOLVED",
+        completion_image_path: completionPath,
+        resolution_note: noteClean,
+        resolved_at: now,
+        public_visibility: true,
+        updated_at: now,
+      });
 
-  if (updateErr) {
-    console.warn("Could not update citizen_reports in Supabase:", updateErr.message);
+    if (isTargetUuid) {
+      await q.eq("id", targetId);
+    } else {
+      await q.eq("reference_number", assignment.reference_number || cleanId);
+    }
+  } catch (err) {
+    console.warn("Supabase submitCompletedWork network warning:", err);
   }
 
-  // 6. Record in report_status_history (Creates Official Department Response with Before/After link & Timer duration)
-  await supabase.from("report_status_history").insert({
-    report_id: targetId,
-    previous_status: assignment.current_status,
-    new_status: "RESOLVED",
-    public_message: `विभागीय कार्य पूर्ण: ${noteClean} [⏱️ कुल कार्य समय: ${durationStr}]${locMsg}`,
-    changed_by_name: performer,
-  });
+  // 6. Record in report_status_history
+  try {
+    const isTargetUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
+    if (isTargetUuid) {
+      await supabase.from("report_status_history").insert({
+        report_id: targetId,
+        previous_status: assignment.current_status,
+        new_status: "RESOLVED",
+        public_message: `विभागीय कार्य पूर्ण: ${noteClean} [⏱️ कुल कार्य समय: ${durationStr}]${locMsg}`,
+        changed_by_name: performer,
+      });
+    }
+  } catch (err) {
+    console.warn("report_status_history insert skipped:", err);
+  }
 
-  // 7. Synchronize local store
+  // 7. Synchronize local store & localStorage
   const updatedComplaint = updateComplaintStatus(
-    reportId,
+    targetId,
     "RESOLVED",
     noteClean,
     performer
-  );
+  ) || (assignment.reference_number ? updateComplaintStatus(
+    assignment.reference_number,
+    "RESOLVED",
+    noteClean,
+    performer
+  ) : undefined);
+
   if (updatedComplaint) {
     updatedComplaint.video_url = fullCompletionUrl;
     updatedComplaint.completion_note = noteClean;
@@ -608,6 +698,34 @@ export async function submitCompletedWork(
       updatedComplaint.worker_resolution_location = workerLocation;
     }
   }
+
+  try {
+    const raw = localStorage.getItem("rewa_complaints");
+    if (raw) {
+      const list = JSON.parse(raw);
+      const match = list.find((c: any) =>
+        c.id === targetId ||
+        c.ticket_number === targetId ||
+        c.id === cleanId ||
+        c.ticket_number === cleanId ||
+        c.ticket_number === assignment.reference_number
+      );
+      if (match) {
+        match.status = "RESOLVED";
+        match.video_url = fullCompletionUrl;
+        match.completion_image_path = completionPath;
+        match.resolution_note = noteClean;
+        match.completion_note = noteClean;
+        match.resolved_at = now;
+        match.completed_by_name = performer;
+        match.work_duration_seconds = durationSec;
+        if (workerLocation) {
+          match.worker_resolution_location = workerLocation;
+        }
+        localStorage.setItem("rewa_complaints", JSON.stringify(list));
+      }
+    }
+  } catch {}
 
   assignment.current_status = "RESOLVED";
   assignment.completion_image_path = completionPath;

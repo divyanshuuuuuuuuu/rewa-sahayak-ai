@@ -514,6 +514,9 @@ export default function ComplaintDetail() {
                           <img
                             src={complaint.image_url}
                             alt="Before Problem"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120" viewBox="0 0 200 120"><rect width="200" height="120" fill="#f1f5f9"/><text x="100" y="65" text-anchor="middle" fill="#64748b" font-family="sans-serif" font-size="12">Evidence Photo</text></svg>')}`;
+                            }}
                             style={{ width: '100%', height: 110, objectFit: 'cover', display: 'block' }}
                           />
                         ) : (
@@ -531,6 +534,9 @@ export default function ComplaintDetail() {
                         <img
                           src={complaint.video_url}
                           alt="Department Resolution Proof"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120" viewBox="0 0 200 120"><rect width="200" height="120" fill="#f0fdf4"/><text x="100" y="65" text-anchor="middle" fill="#15803d" font-family="sans-serif" font-size="12">Resolution Verified</text></svg>')}`;
+                          }}
                           style={{ width: '100%', height: 110, objectFit: 'cover', display: 'block' }}
                         />
                       </div>

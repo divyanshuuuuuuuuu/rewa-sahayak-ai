@@ -364,6 +364,11 @@ export default function Complaints() {
                             <Camera size={12} /> {bilingual("फोटो साक्ष्य", "Photo Attached")}
                           </span>
                         )}
+                        {(r.completion_image_path || (r as any).video_url) && (
+                          <span style={{ fontSize: "0.72rem", color: "#166534", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.25rem", background: "#bbf7d0", padding: "0.15rem 0.5rem", borderRadius: 4, border: "1px solid #4ade80" }}>
+                            📸 {bilingual("समाधान फोटो", "Proof Attached")}
+                          </span>
+                        )}
                         {(r.voice_audio_path || (r as any).is_voice_transcribed) && (
                           <span style={{ fontSize: "0.72rem", color: "#0b3a6d", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.25rem", background: "#eff6ff", padding: "0.15rem 0.5rem", borderRadius: 4, border: "1px solid #bfdbfe" }}>
                             🎙️ {bilingual("बोलकर दर्ज (Voice Transcribed)", "Voice Transcribed")}
