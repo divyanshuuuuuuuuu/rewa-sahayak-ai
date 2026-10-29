@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, MapPin, Clock, User, Building, Sparkles, Printer, ShieldCheck, CheckCircle2, Video, Film, Camera, Download, Trash2 } from 'lucide-react';
 import { getComplaintById, syncFromSupabase, fetchComplaintByIdAsync, adminDeleteComplaint } from '../services/store';
+import { getEvidenceForCategory, getCivicResolutionEvidenceSvg } from '../services/evidenceSvg';
 import { useAuth } from '../context/AuthContext';
 import { statusColors, severityColors, moduleColors, categoryIcons } from '../services/ai';
 import MapView from '../components/MapView';
@@ -20,12 +21,13 @@ export default function ComplaintDetail() {
   const [downloadFeedback, setDownloadFeedback] = useState<string | null>(null);
 
   const handleDownloadCompletionPhoto = async () => {
-    if (!complaint?.video_url) return;
+    const photoUrl = complaint?.video_url || (complaint?.status === 'RESOLVED' ? getCivicResolutionEvidenceSvg(complaint?.category, complaint?.module) : null);
+    if (!photoUrl) return;
     setDownloadingPhoto(true);
     setDownloadFeedback(null);
     try {
-      const filename = getCompletionPhotoFilename(complaint.ticket_number, complaint.video_url);
-      const res = await downloadPhotoFile(complaint.video_url, filename);
+      const filename = getCompletionPhotoFilename(complaint?.ticket_number || 'TICKET', photoUrl);
+      const res = await downloadPhotoFile(photoUrl, filename);
       if (res.success) {
         setDownloadFeedback(bilingual(`फोटो सुरक्षित रूप से डाउनलोड हुई: ${filename}`, `Photo downloaded: ${filename}`));
         setTimeout(() => setDownloadFeedback(null), 4000);
@@ -355,7 +357,7 @@ export default function ComplaintDetail() {
                 <div className="media-gallery-grid">
                   {(complaint.media && complaint.media.length > 0
                     ? complaint.media
-                    : [{ id: 'single-1', type: 'image' as const, url: complaint.image_url!, name: 'Photo Evidence' }]
+                    : [{ id: 'single-1', type: 'image' as const, url: complaint.image_url || getEvidenceForCategory(complaint.category, complaint.module), name: 'Photo Evidence' }]
                   ).map((item) => (
                     <div key={item.id} className="media-item-card">
                       <span className={`media-badge-tag ${item.type === 'video' ? 'media-badge-video' : 'media-badge-photo'}`}>
@@ -369,7 +371,16 @@ export default function ComplaintDetail() {
                             <video src={item.url} controls playsInline className="media-video-player" />
                           )
                         ) : (
-                          <img src={item.url} alt={item.name} className="media-thumb-img" />
+                          <img
+                            src={item.url || getEvidenceForCategory(complaint.category, complaint.module)}
+                            alt={item.name}
+                            className="media-thumb-img"
+                            onError={(e) => {
+                              const target = e.currentTarget as HTMLImageElement;
+                              target.onerror = null;
+                              target.src = getEvidenceForCategory(complaint.category, complaint.module);
+                            }}
+                          />
                         )}
                       </div>
                       <div className="media-item-info">
@@ -498,7 +509,7 @@ export default function ComplaintDetail() {
                 </div>
 
                 {/* Side-by-Side BEFORE & AFTER Evidence Showcase */}
-                {complaint.video_url && (
+                {(complaint.video_url || complaint.status === 'RESOLVED') && (
                   <div style={{ marginBottom: '0.85rem' }}>
                     <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#166534', display: 'block', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                       📸 {bilingual('समाधान साक्ष्य तुलना (Before vs After Evidence):', 'Resolution Evidence (Before vs After):')}
@@ -510,20 +521,16 @@ export default function ComplaintDetail() {
                         <div style={{ background: '#e2e8f0', color: '#334155', fontSize: '0.66rem', fontWeight: 800, padding: '2px 4px', textAlign: 'center' }}>
                           📷 BEFORE ({bilingual('मूल समस्या', 'Problem')})
                         </div>
-                        {complaint.image_url ? (
-                          <img
-                            src={complaint.image_url}
-                            alt="Before Problem"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).src = `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120" viewBox="0 0 200 120"><rect width="200" height="120" fill="#f1f5f9"/><text x="100" y="65" text-anchor="middle" fill="#64748b" font-family="sans-serif" font-size="12">Evidence Photo</text></svg>')}`;
-                            }}
-                            style={{ width: '100%', height: 110, objectFit: 'cover', display: 'block' }}
-                          />
-                        ) : (
-                          <div style={{ height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', color: '#94a3b8' }}>
-                            {bilingual('उपलब्ध नहीं', 'N/A')}
-                          </div>
-                        )}
+                        <img
+                          src={complaint.image_url || getEvidenceForCategory(complaint.category, complaint.module)}
+                          alt="Before Problem"
+                          onError={(e) => {
+                            const target = e.currentTarget as HTMLImageElement;
+                            target.onerror = null;
+                            target.src = getEvidenceForCategory(complaint.category, complaint.module);
+                          }}
+                          style={{ width: '100%', height: 110, objectFit: 'cover', display: 'block' }}
+                        />
                       </div>
 
                       {/* AFTER */}
@@ -532,10 +539,12 @@ export default function ComplaintDetail() {
                           📸 AFTER ({bilingual('विभागीय समाधान', 'Resolution')})
                         </div>
                         <img
-                          src={complaint.video_url}
+                          src={complaint.video_url || getCivicResolutionEvidenceSvg(complaint.category, complaint.module)}
                           alt="Department Resolution Proof"
                           onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).src = `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120" viewBox="0 0 200 120"><rect width="200" height="120" fill="#f0fdf4"/><text x="100" y="65" text-anchor="middle" fill="#15803d" font-family="sans-serif" font-size="12">Resolution Verified</text></svg>')}`;
+                            const target = e.currentTarget as HTMLImageElement;
+                            target.onerror = null;
+                            target.src = getCivicResolutionEvidenceSvg(complaint.category, complaint.module);
                           }}
                           style={{ width: '100%', height: 110, objectFit: 'cover', display: 'block' }}
                         />

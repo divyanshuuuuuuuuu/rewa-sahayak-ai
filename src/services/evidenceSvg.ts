@@ -9,7 +9,7 @@ export function getCivicEvidenceSvg(type: 'garbage' | 'leakage' | 'streetlight' 
     garbage: {
       bg: '#1c1917',
       icon: '🗑️',
-      title: 'WASTE ACCUMULATION & ILLEGAL DUMPING',
+      title: 'WASTE ACCUMULATION &amp; ILLEGAL DUMPING',
       detail: 'Ward 12, Sirmour Chowk, Rewa • Sector 4',
       accent: '#f59e0b',
     },
@@ -37,14 +37,14 @@ export function getCivicEvidenceSvg(type: 'garbage' | 'leakage' | 'streetlight' 
     drainage: {
       bg: '#1e293b',
       icon: '🌊',
-      title: 'DRAINAGE OVERFLOW & SEWAGE CONTAMINATION',
+      title: 'DRAINAGE OVERFLOW &amp; SEWAGE CONTAMINATION',
       detail: 'Ward 18, Nai Basti Residential Area, Rewa',
       accent: '#14b8a6',
     },
     dustbin: {
       bg: '#14532d',
       icon: '📦',
-      title: 'MUNICIPAL DUMPSTER OVERFLOW & UNSANITARY CONDITIONS',
+      title: 'MUNICIPAL DUMPSTER OVERFLOW &amp; UNSANITARY CONDITIONS',
       detail: 'Commercial Vegetable Market Depot, Rewa',
       accent: '#22c55e',
     },
@@ -135,6 +135,71 @@ export function getEvidenceForCategory(category: string, module?: string): strin
     return getCivicEvidenceSvg('dustbin');
   }
   return getCivicEvidenceSvg('garbage');
+}
+
+export function getCivicResolutionEvidenceSvg(category?: string, module?: string): string {
+  const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const timeStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  const catStr = (category || 'Civic Issue').replace(/&/g, '&amp;').toUpperCase();
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420">
+    <defs>
+      <linearGradient id="resBg" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#064e3b"/>
+        <stop offset="60%" stop-color="#022c22"/>
+        <stop offset="100%" stop-color="#020617"/>
+      </linearGradient>
+      <linearGradient id="resHud" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="rgba(0,30,15,0.75)"/>
+        <stop offset="100%" stop-color="rgba(0,15,5,0.92)"/>
+      </linearGradient>
+    </defs>
+
+    <rect width="640" height="420" fill="url(#resBg)"/>
+
+    <!-- Subtle Clean Grid & Horizon Lines -->
+    <line x1="0" y1="260" x2="640" y2="260" stroke="#15803d" stroke-width="2" stroke-dasharray="8 6"/>
+    <polygon points="120,420 280,260 360,260 520,420" fill="rgba(34,197,94,0.06)"/>
+
+    <!-- Completed Graphic Representation -->
+    <circle cx="320" cy="170" r="75" fill="rgba(34,197,94,0.12)" stroke="#22c55e" stroke-width="3"/>
+    <text x="320" y="195" font-size="64" text-anchor="middle">✅</text>
+
+    <!-- Camera HUD Viewfinder Overlay (Corner Brackets) -->
+    <path d="M 30,50 L 30,30 L 50,30" stroke="#86efac" stroke-width="3" fill="none"/>
+    <path d="M 610,50 L 610,30 L 590,30" stroke="#86efac" stroke-width="3" fill="none"/>
+    <path d="M 30,370 L 30,390 L 50,390" stroke="#86efac" stroke-width="3" fill="none"/>
+    <path d="M 610,370 L 610,390 L 590,390" stroke="#86efac" stroke-width="3" fill="none"/>
+
+    <!-- Live Recording / Camera HUD Indicator -->
+    <circle cx="45" cy="45" r="6" fill="#22c55e"/>
+    <text x="60" y="49" fill="#86efac" font-size="11" font-family="monospace" font-weight="bold">RESOLVED • GEO-CAMERA AFTER PROOF</text>
+    <text x="595" y="49" fill="#6ee7b7" font-size="11" font-family="monospace" text-anchor="end">ON-SITE VERIFIED</text>
+
+    <!-- Official Anti-Fraud Watermark Stamp Box -->
+    <rect x="20" y="300" width="600" height="98" rx="6" fill="url(#resHud)" stroke="rgba(34,197,94,0.3)" stroke-width="1.5"/>
+
+    <text x="35" y="324" fill="#86efac" font-size="12" font-family="system-ui, sans-serif" font-weight="900" letter-spacing="1">
+      ● REWA MUNICIPAL CORPORATION — OFFICIAL RESOLUTION PROOF
+    </text>
+    <text x="35" y="344" fill="#ffffff" font-size="13" font-family="system-ui, sans-serif" font-weight="bold">
+      ${catStr} RESOLVED • SITE RESTORED &amp; CLEANED
+    </text>
+    <text x="35" y="362" fill="#a7f3d0" font-size="11" font-family="system-ui, sans-serif">
+      📍 Rewa Nagar Nigam Field Team • Action Verified On-Site
+    </text>
+    <text x="35" y="382" fill="#6ee7b7" font-size="11" font-family="monospace" font-weight="bold">
+      GPS: 24.5373° N, 81.3005° E | DATE: ${dateStr} ${timeStr} | WORK RESOLUTION CONFIRMED ✓
+    </text>
+
+    <!-- Resolution Verified Stamp -->
+    <rect x="475" y="315" width="135" height="24" rx="4" fill="#15803d"/>
+    <text x="542" y="331" fill="#ffffff" font-size="10" font-family="system-ui, sans-serif" font-weight="bold" text-anchor="middle">
+      RESOLUTION VERIFIED ✓
+    </text>
+  </svg>`;
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
 export function getCivicVideoPosterSvg(title: string = 'CIVIC INCIDENT RECORDING'): string {

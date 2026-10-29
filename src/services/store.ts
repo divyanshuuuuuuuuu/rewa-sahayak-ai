@@ -3,7 +3,7 @@
 import type { Complaint, ComplaintStatus, ComplaintUpdate, StatsData, User, Category, Module, Severity } from '../types';
 import { demoUsers } from '../data/demoData';
 import { v4 as uuidv4 } from 'uuid';
-import { getEvidenceForCategory } from './evidenceSvg';
+import { getEvidenceForCategory, getCivicResolutionEvidenceSvg } from './evidenceSvg';
 import { supabase } from './supabase';
 import { getImageUrl, getAudioUrl } from './supabaseStore';
 
@@ -11,6 +11,8 @@ const COMPLAINTS_KEY = 'rewa_complaints';
 const USER_KEY = 'rewa_current_user';
 
 export function dbReportToComplaint(r: any, history: any[] = []): Complaint {
+  const isResolved = r.current_status === 'RESOLVED' || r.status === 'RESOLVED';
+
   const image_url = r.before_image_path
     ? (r.before_image_path.startsWith('http') || r.before_image_path.startsWith('data:')
         ? r.before_image_path
@@ -21,7 +23,7 @@ export function dbReportToComplaint(r: any, history: any[] = []): Complaint {
     ? (r.completion_image_path.startsWith('http') || r.completion_image_path.startsWith('data:')
         ? r.completion_image_path
         : getImageUrl(r.completion_image_path, 'completion-images'))
-    : null;
+    : (r.video_url || (isResolved ? getCivicResolutionEvidenceSvg(r.category, r.module) : null));
 
   const audio_url = r.voice_audio_path
     ? (r.voice_audio_path.startsWith('http') || r.voice_audio_path.startsWith('blob:') || r.voice_audio_path.startsWith('data:')
