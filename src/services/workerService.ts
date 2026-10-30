@@ -602,10 +602,15 @@ export async function submitCompletedWork(
   let fullCompletionUrl: string = '';
 
   try {
-    const res = await uploadReportImage(completionPhoto, "completion-images");
+    let res = await uploadReportImage(completionPhoto, "completion-images");
+    let bucket: "completion-images" | "report-images" = "completion-images";
+    if (res.error || !res.path) {
+      res = await uploadReportImage(completionPhoto, "report-images");
+      bucket = "report-images";
+    }
     if (res.path && !res.error) {
       completionPath = res.path;
-      fullCompletionUrl = getImageUrl(res.path, "completion-images");
+      fullCompletionUrl = getImageUrl(res.path, bucket);
     }
   } catch (err) {
     console.warn("Storage upload error, using local data URL fallback:", err);
@@ -687,8 +692,17 @@ export async function submitCompletedWork(
     performer
   ) : undefined);
 
+  const isVid = fullCompletionUrl.endsWith('.mp4') || fullCompletionUrl.endsWith('.webm');
+  const afterMediaItem = {
+    id: 'm-after-work',
+    type: isVid ? ('video' as const) : ('image' as const),
+    url: fullCompletionUrl,
+    name: 'विभागीय कार्य समाप्ति साक्ष्य (After Resolution Photo)',
+  };
+
   if (updatedComplaint) {
     updatedComplaint.video_url = fullCompletionUrl;
+    updatedComplaint.completion_image_path = completionPath;
     updatedComplaint.completion_note = noteClean;
     updatedComplaint.completed_by_name = performer;
     updatedComplaint.resolved_at = now;
@@ -696,6 +710,10 @@ export async function submitCompletedWork(
     updatedComplaint.work_duration_seconds = durationSec;
     if (workerLocation) {
       updatedComplaint.worker_resolution_location = workerLocation;
+    }
+    if (!updatedComplaint.media) updatedComplaint.media = [];
+    if (!updatedComplaint.media.some(m => m.url === fullCompletionUrl)) {
+      updatedComplaint.media.push(afterMediaItem);
     }
   }
 
@@ -722,8 +740,15 @@ export async function submitCompletedWork(
         if (workerLocation) {
           match.worker_resolution_location = workerLocation;
         }
+        match.media = match.media || [];
+        if (!match.media.some((m: any) => m.url === fullCompletionUrl)) {
+          match.media.push(afterMediaItem);
+        }
         localStorage.setItem("rewa_complaints", JSON.stringify(list));
       }
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('rewa_store_updated'));
     }
   } catch {}
 

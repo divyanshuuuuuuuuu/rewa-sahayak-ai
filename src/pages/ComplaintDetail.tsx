@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin, Clock, User, Building, Sparkles, Printer, ShieldCheck, CheckCircle2, Video, Film, Camera, Download, Trash2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, User, Building, Sparkles, Printer, ShieldCheck, CheckCircle2, Video, Film, Camera, Download, Trash2, X, Eye } from 'lucide-react';
 import { getComplaintById, syncFromSupabase, fetchComplaintByIdAsync, adminDeleteComplaint } from '../services/store';
 import { getEvidenceForCategory, getCivicResolutionEvidenceSvg } from '../services/evidenceSvg';
 import { useAuth } from '../context/AuthContext';
@@ -19,6 +19,7 @@ export default function ComplaintDetail() {
   const [loading, setLoading] = useState(!complaint);
   const [downloadingPhoto, setDownloadingPhoto] = useState(false);
   const [downloadFeedback, setDownloadFeedback] = useState<string | null>(null);
+  const [previewModalImg, setPreviewModalImg] = useState<{ url: string; title: string } | null>(null);
 
   const handleDownloadCompletionPhoto = async () => {
     const photoUrl = complaint?.video_url || (complaint?.status === 'RESOLVED' ? getCivicResolutionEvidenceSvg(complaint?.category, complaint?.module) : null);
@@ -43,12 +44,16 @@ export default function ComplaintDetail() {
     if (!id) return;
     let active = true;
     const loadData = async () => {
-      let current = getComplaintById(id);
-      if (!current) {
-        current = await fetchComplaintByIdAsync(id);
+      const cached = getComplaintById(id);
+      if (cached && active) {
+        setComplaint(cached);
+        setLoading(false);
       }
-      if (active) {
-        setComplaint(current);
+      const fresh = await fetchComplaintByIdAsync(id, true);
+      if (active && fresh) {
+        setComplaint(fresh);
+        setLoading(false);
+      } else if (active && !cached) {
         setLoading(false);
       }
     };
@@ -336,68 +341,104 @@ export default function ComplaintDetail() {
             </div>
 
             {/* Multi-Media Photo & Video Evidence Gallery */}
-            {((complaint.media && complaint.media.length > 0) || complaint.image_url) && (
-              <div className="card" style={{ marginBottom: '1.25rem', border: '1.5px solid #86efac' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  <h3 className="detail-section-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Film size={18} color="#0b3a6d" />
-                    <span>{bilingual('संलग्न साक्ष्य (फोटो एवं वीडियो)', 'Attached Evidence (Photos & Videos)')}</span>
-                  </h3>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: '#dcfce7', color: '#166534', padding: '0.2rem 0.65rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 800 }}>
-                    <ShieldCheck size={14} />
-                    {complaint.media && complaint.media.length > 1
-                      ? bilingual(
-                          `✓ ${complaint.media.filter(m => m.type === 'image').length} फोटो, ${complaint.media.filter(m => m.type === 'video').length} वीडियो सत्यापित`,
-                          `✓ ${complaint.media.filter(m => m.type === 'image').length} Photos, ${complaint.media.filter(m => m.type === 'video').length} Videos Verified`
-                        )
-                      : bilingual('अनिवार्य साक्ष्य सत्यापित (Anti-Spam Verified)', 'Compulsory Evidence Verified')}
-                  </span>
-                </div>
+            {(() => {
+              const afterUrl = complaint.completion_image_path || complaint.video_url || (complaint.status === 'RESOLVED' ? getCivicResolutionEvidenceSvg(complaint.category, complaint.module) : null);
+              const rawMedia = (complaint.media && complaint.media.length > 0)
+                ? complaint.media
+                : complaint.image_url
+                ? [{ id: 'before-1', type: 'image' as const, url: complaint.image_url, name: bilingual('समस्या साक्ष्य फोटो (Before Problem Photo)', 'Problem Evidence Photo (Before)') }]
+                : [{ id: 'before-def', type: 'image' as const, url: getEvidenceForCategory(complaint.category, complaint.module), name: bilingual('समस्या साक्ष्य फोटो (Before Photo)', 'Problem Evidence Photo') }];
 
-                <div className="media-gallery-grid">
-                  {(complaint.media && complaint.media.length > 0
-                    ? complaint.media
-                    : [{ id: 'single-1', type: 'image' as const, url: complaint.image_url || getEvidenceForCategory(complaint.category, complaint.module), name: 'Photo Evidence' }]
-                  ).map((item) => (
-                    <div key={item.id} className="media-item-card">
-                      <span className={`media-badge-tag ${item.type === 'video' ? 'media-badge-video' : 'media-badge-photo'}`}>
-                        {item.type === 'video' ? '🎥 VIDEO' : '📷 PHOTO'}
-                      </span>
-                      <div className="media-thumb-container">
-                        {item.type === 'video' ? (
-                          item.url.startsWith('data:image/svg') ? (
-                            <img src={item.url} alt={item.name} className="media-thumb-img" />
-                          ) : (
-                            <video src={item.url} controls playsInline className="media-video-player" />
-                          )
-                        ) : (
-                          <img
-                            src={item.url || getEvidenceForCategory(complaint.category, complaint.module)}
-                            alt={item.name}
-                            className="media-thumb-img"
-                            onError={(e) => {
-                              const target = e.currentTarget as HTMLImageElement;
-                              target.onerror = null;
-                              target.src = getEvidenceForCategory(complaint.category, complaint.module);
-                            }}
-                          />
-                        )}
-                      </div>
-                      <div className="media-item-info">
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px', fontWeight: 600 }}>
-                          {item.name}
-                        </span>
-                        <span style={{ color: '#15803d', fontWeight: 700 }}>✓ Verified</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              const galleryItems = [...rawMedia];
+              const hasAfterInMedia = afterUrl && galleryItems.some(m => m.url === afterUrl);
+              if (afterUrl && !hasAfterInMedia) {
+                const isVid = afterUrl.endsWith('.mp4') || afterUrl.endsWith('.webm');
+                galleryItems.push({
+                  id: 'worker-after-resolution-proof',
+                  type: isVid ? 'video' : 'image',
+                  url: afterUrl,
+                  name: bilingual(
+                    `विभागीय समाधान फोटो (After Resolution - ${complaint.assigned_department || 'जल विभाग'})`,
+                    `Worker Resolution Proof (After Photo - ${complaint.assigned_department || 'Water Dept'})`
+                  ),
+                });
+              }
 
-                <p style={{ fontSize: '0.75rem', color: '#15803d', marginTop: '0.65rem', fontWeight: 600, marginBottom: 0 }}>
-                  ✓ {bilingual('भू-निर्देशांक (GPS) एवं वास्तविक स्थल टाइमस्टैम्प रीवा नगर निगम द्वारा सत्यापित', 'GPS coordinates & real-time timestamp verified by Rewa Nagar Nigam')}
-                </p>
-              </div>
-            )}
+              if (galleryItems.length === 0) return null;
+
+              return (
+                <div className="card" style={{ marginBottom: '1.25rem', border: '1.5px solid #86efac' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <h3 className="detail-section-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Film size={18} color="#0b3a6d" />
+                      <span>{bilingual('संलग्न साक्ष्य (फोटो एवं वीडियो)', 'Attached Evidence (Photos & Videos)')}</span>
+                    </h3>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: '#dcfce7', color: '#166534', padding: '0.2rem 0.65rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 800 }}>
+                      <ShieldCheck size={14} />
+                      {afterUrl
+                        ? bilingual('✓ समस्या एवं समाधान साक्ष्य दोनों सत्यापित (Before & After Verified)', '✓ Before & After Evidence Verified')
+                        : bilingual('अनिवार्य साक्ष्य सत्यापित (Anti-Spam Verified)', 'Compulsory Evidence Verified')}
+                    </span>
+                  </div>
+
+                  <div className="media-gallery-grid">
+                    {galleryItems.map((item) => {
+                      const isAfter = item.id.includes('after') || (!!afterUrl && item.url === afterUrl);
+                      return (
+                        <div
+                          key={item.id}
+                          className="media-item-card"
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => setPreviewModalImg({ url: item.url, title: item.name })}
+                          title={bilingual('बड़ा आकार देखने हेतु क्लिक करें', 'Click to view full image')}
+                        >
+                          <span
+                            className={`media-badge-tag ${!isAfter && item.type === 'video' ? 'media-badge-video' : 'media-badge-photo'}`}
+                            style={isAfter ? { background: '#15803d', color: '#fff', border: '1px solid #166534' } : undefined}
+                          >
+                            {isAfter ? '📸 AFTER PHOTO' : item.type === 'video' ? '🎥 VIDEO' : '📷 BEFORE PHOTO'}
+                          </span>
+                          <div className="media-thumb-container">
+                            {item.type === 'video' ? (
+                              item.url.startsWith('data:image/svg') ? (
+                                <img src={item.url} alt={item.name} className="media-thumb-img" />
+                              ) : (
+                                <video src={item.url} controls playsInline className="media-video-player" />
+                              )
+                            ) : (
+                              <img
+                                src={item.url || (isAfter ? getCivicResolutionEvidenceSvg(complaint.category, complaint.module) : getEvidenceForCategory(complaint.category, complaint.module))}
+                                alt={item.name}
+                                className="media-thumb-img"
+                                onError={(e) => {
+                                  const target = e.currentTarget as HTMLImageElement;
+                                  target.onerror = null;
+                                  target.src = isAfter
+                                    ? getCivicResolutionEvidenceSvg(complaint.category, complaint.module)
+                                    : getEvidenceForCategory(complaint.category, complaint.module);
+                                }}
+                              />
+                            )}
+                          </div>
+                          <div className="media-item-info">
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px', fontWeight: 600 }}>
+                              {item.name}
+                            </span>
+                            <span style={{ color: '#15803d', fontWeight: 700 }}>
+                              {isAfter ? '✓ Resolution Verified' : '✓ Verified'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <p style={{ fontSize: '0.75rem', color: '#15803d', marginTop: '0.65rem', fontWeight: 600, marginBottom: 0 }}>
+                    ✓ {bilingual('भू-निर्देशांक (GPS) एवं वास्तविक स्थल टाइमस्टैम्प रीवा नगर निगम द्वारा सत्यापित', 'GPS coordinates & real-time timestamp verified by Rewa Nagar Nigam')}
+                  </p>
+                </div>
+              );
+            })()}
 
 
 
@@ -667,6 +708,78 @@ export default function ComplaintDetail() {
           </div>
         </div>
       </div>
+
+      {/* Full Photo / Video Evidence Preview Modal */}
+      {previewModalImg && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setPreviewModalImg(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(2, 6, 23, 0.85)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 9999,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'relative',
+              maxWidth: 760,
+              width: '100%',
+              background: '#0f172a',
+              borderRadius: 12,
+              border: '1px solid #334155',
+              overflow: 'hidden',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', background: '#1e293b', borderBottom: '1px solid #334155' }}>
+              <span style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.9rem' }}>
+                {previewModalImg.title}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewModalImg(null)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 4 }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ padding: '0.75rem', background: '#020617', textAlign: 'center' }}>
+              {previewModalImg.url.endsWith('.mp4') || previewModalImg.url.endsWith('.webm') ? (
+                <video src={previewModalImg.url} controls autoPlay style={{ maxWidth: '100%', maxHeight: '65vh', borderRadius: 6 }} />
+              ) : (
+                <img src={previewModalImg.url} alt={previewModalImg.title} style={{ maxWidth: '100%', maxHeight: '65vh', objectFit: 'contain', borderRadius: 6 }} />
+              )}
+            </div>
+            <div style={{ padding: '0.65rem 1rem', background: '#1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <span style={{ color: '#86efac', fontSize: '0.76rem', fontWeight: 700 }}>
+                ✓ GPS & टाइमस्टैम्प सत्यापित साक्ष्य
+              </span>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ background: '#15803d', color: '#fff', borderColor: '#166534', fontWeight: 700 }}
+                onClick={async () => {
+                  const filename = getCompletionPhotoFilename(complaint?.ticket_number || 'EVIDENCE', previewModalImg.url);
+                  await downloadPhotoFile(previewModalImg.url, filename);
+                }}
+              >
+                <Download size={14} />
+                <span>{bilingual('फोटो डाउनलोड करें', 'Download Photo')}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

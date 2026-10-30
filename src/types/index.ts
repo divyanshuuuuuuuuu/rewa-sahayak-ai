@@ -45,6 +45,7 @@ export interface Complaint {
   address: string;
   image_url: string | null;
   video_url?: string | null;
+  completion_image_path?: string | null;
   audio_url?: string | null;
   audio_duration?: number | null;
   audio_mime_type?: string | null;

@@ -7,7 +7,7 @@ import {
   Check, ChevronDown, ChevronUp, Image as ImageIcon
 } from "lucide-react";
 import MapView from "../../components/MapView";
-import { getEvidenceForCategory } from "../../services/evidenceSvg";
+import { getEvidenceForCategory, getCivicResolutionEvidenceSvg } from "../../services/evidenceSvg";
 import {
   getMyAssignmentById, startWork, submitCompletedWork, recordWorkDelay, getImageUrl,
   workerStatusColors, workerStatusLabels, formatDurationText, type WorkerAssignment
@@ -1551,18 +1551,17 @@ export default function WorkerTaskDetail() {
                 <div style={{ background: "#e2e8f0", color: "#334155", fontSize: "0.68rem", fontWeight: 800, padding: "3px 6px", textAlign: "center" }}>
                   📷 BEFORE (नागरिक समस्या)
                 </div>
-                {beforeImageUrl ? (
-                  <img
-                    src={beforeImageUrl}
-                    alt="Before Problem"
-                    style={{ width: "100%", height: 130, objectFit: "cover", display: "block", cursor: "pointer" }}
-                    onClick={() => setPreviewModalImg(beforeImageUrl)}
-                  />
-                ) : (
-                  <div style={{ height: 130, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.72rem", color: "#94a3b8" }}>
-                    उपलब्ध नहीं
-                  </div>
-                )}
+                <img
+                  src={beforeImageUrl || getEvidenceForCategory(assignment.category, assignment.module ?? undefined)}
+                  alt="Before Problem"
+                  onError={(e) => {
+                    const target = e.currentTarget as HTMLImageElement;
+                    target.onerror = null;
+                    target.src = getEvidenceForCategory(assignment.category, assignment.module ?? undefined);
+                  }}
+                  style={{ width: "100%", height: 130, objectFit: "cover", display: "block", cursor: "pointer" }}
+                  onClick={() => setPreviewModalImg(beforeImageUrl || getEvidenceForCategory(assignment.category, assignment.module ?? undefined))}
+                />
               </div>
 
               {/* After Photo */}
@@ -1570,18 +1569,17 @@ export default function WorkerTaskDetail() {
                 <div style={{ background: "#22c55e", color: "#fff", fontSize: "0.68rem", fontWeight: 800, padding: "3px 6px", textAlign: "center" }}>
                   📸 AFTER (विभागीय समाधान)
                 </div>
-                {afterImageUrl ? (
-                  <img
-                    src={afterImageUrl}
-                    alt="After Resolution"
-                    style={{ width: "100%", height: 130, objectFit: "cover", display: "block", cursor: "pointer" }}
-                    onClick={() => setPreviewModalImg(afterImageUrl)}
-                  />
-                ) : (
-                  <div style={{ height: 130, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.72rem", color: "#94a3b8" }}>
-                    फोटो अपलोड नहीं
-                  </div>
-                )}
+                <img
+                  src={afterImageUrl || getCivicResolutionEvidenceSvg(assignment.category, assignment.module ?? undefined)}
+                  alt="After Resolution"
+                  onError={(e) => {
+                    const target = e.currentTarget as HTMLImageElement;
+                    target.onerror = null;
+                    target.src = getCivicResolutionEvidenceSvg(assignment.category, assignment.module ?? undefined);
+                  }}
+                  style={{ width: "100%", height: 130, objectFit: "cover", display: "block", cursor: "pointer" }}
+                  onClick={() => setPreviewModalImg(afterImageUrl || getCivicResolutionEvidenceSvg(assignment.category, assignment.module ?? undefined))}
+                />
               </div>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { CheckCircle2, Calendar, ImageOff, Download, ExternalLink, Eye } from "l
 import {
   getMyCompletedWork, getImageUrl, type WorkerAssignment
 } from "../../services/workerService";
+import { getEvidenceForCategory, getCivicResolutionEvidenceSvg } from "../../services/evidenceSvg";
 import { downloadPhotoFile, getCompletionPhotoFilename } from "../../services/downloadService";
 
 function CompletionCard({ assignment }: { assignment: WorkerAssignment }) {
@@ -11,10 +12,10 @@ function CompletionCard({ assignment }: { assignment: WorkerAssignment }) {
 
   const beforeUrl = assignment.before_image_path
     ? (assignment.before_image_path.startsWith("http") ? assignment.before_image_path : getImageUrl(assignment.before_image_path, "report-images"))
-    : null;
+    : getEvidenceForCategory(assignment.category, assignment.module ?? undefined);
   const afterUrl = assignment.completion_image_path
     ? (assignment.completion_image_path.startsWith("http") ? assignment.completion_image_path : getImageUrl(assignment.completion_image_path, "completion-images"))
-    : null;
+    : getCivicResolutionEvidenceSvg(assignment.category, assignment.module ?? undefined);
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleString("en-IN", {
@@ -87,7 +88,11 @@ function CompletionCard({ assignment }: { assignment: WorkerAssignment }) {
                 src={beforeUrl}
                 alt="Before"
                 style={{ width: "100%", height: 100, objectFit: "cover", borderRadius: 8, border: "1.5px solid #fecaca" }}
-                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+                onError={e => {
+                  const t = e.target as HTMLImageElement;
+                  t.onerror = null;
+                  t.src = getEvidenceForCategory(assignment.category, assignment.module ?? undefined);
+                }}
               />
             ) : (
               <div style={{ height: 100, background: "#f8fafc", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #e2e8f0" }}>
@@ -106,7 +111,11 @@ function CompletionCard({ assignment }: { assignment: WorkerAssignment }) {
                 src={afterUrl}
                 alt="After"
                 style={{ width: "100%", height: 100, objectFit: "cover", borderRadius: 8, border: "2px solid #86efac" }}
-                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+                onError={e => {
+                  const t = e.target as HTMLImageElement;
+                  t.onerror = null;
+                  t.src = getCivicResolutionEvidenceSvg(assignment.category, assignment.module ?? undefined);
+                }}
               />
             ) : (
               <div style={{ height: 100, background: "#f0fdf4", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #bbf7d0" }}>

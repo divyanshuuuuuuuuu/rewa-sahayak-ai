@@ -70,12 +70,19 @@ export function dbReportToComplaint(r: any, history: any[] = []): Complaint {
     address: r.location_description || r.area_or_ward || 'रीवा',
     image_url,
     video_url,
+    completion_image_path: r.completion_image_path || null,
     audio_url,
     audio_duration: r.voice_audio_duration ?? r.audio_duration ?? null,
     audio_mime_type: r.voice_audio_mime_type ?? r.audio_mime_type ?? null,
     is_voice_transcribed: !!(r.voice_audio_path || r.voice_transcript || (r as any).is_voice_transcribed),
     media: [
-      ...(image_url ? [{ id: 'm1', type: 'image' as const, url: image_url, name: 'Evidence Photo' }] : []),
+      ...(image_url ? [{ id: 'm1', type: 'image' as const, url: image_url, name: 'समस्या साक्ष्य (Before Photo)' }] : []),
+      ...(video_url && video_url !== image_url ? [{
+        id: 'm2-after',
+        type: (video_url.endsWith('.mp4') || video_url.endsWith('.webm')) ? ('video' as const) : ('image' as const),
+        url: video_url,
+        name: isResolved ? 'विभागीय कार्य समाप्ति साक्ष्य (After Resolution Photo)' : 'विभागीय साक्ष्य (Department Evidence)',
+      }] : []),
     ],
     voice_transcript: r.voice_transcript || null,
     ai_summary: r.ai_summary || r.description,
@@ -265,36 +272,35 @@ export function getComplaintById(id: string): Complaint | undefined {
   });
 }
 
-export async function fetchComplaintByIdAsync(id: string): Promise<Complaint | undefined> {
+export async function fetchComplaintByIdAsync(id: string, forceSync = false): Promise<Complaint | undefined> {
   if (!id) return undefined;
-  let found = getComplaintById(id);
-  if (found) return found;
-
-  await syncFromSupabase();
-  found = getComplaintById(id);
-  if (found) return found;
+  if (!forceSync) {
+    const found = getComplaintById(id);
+    if (found) return found;
+  }
 
   try {
     const raw = id.trim();
+    const isTargetUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw);
     const { data } = await supabase
       .from('citizen_reports')
       .select('*, report_status_history(*)')
-      .or(`id.eq.${raw},reference_number.ilike.%${raw}%`)
+      .or(isTargetUuid ? `id.eq.${raw}` : `id.eq.${raw},reference_number.ilike.%${raw}%`)
       .limit(1)
       .maybeSingle();
 
     if (data) {
       const c = dbReportToComplaint(data, data.report_status_history || []);
-      if (!memoryComplaints.some(m => m.id === c.id)) {
-        memoryComplaints = sortComplaints([...memoryComplaints, c]);
-        saveComplaintsToStorage(memoryComplaints);
-      }
+      memoryComplaints = sortComplaints([c, ...memoryComplaints.filter(m => m.id !== c.id && m.ticket_number !== c.ticket_number)]);
+      saveComplaintsToStorage(memoryComplaints);
       return c;
     }
   } catch (err) {
     console.warn('fetchComplaintByIdAsync warning:', err);
   }
-  return undefined;
+
+  await syncFromSupabase();
+  return getComplaintById(id);
 }
 
 export async function adminRemoveComplaintFromWebsite(
